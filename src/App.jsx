@@ -291,8 +291,9 @@ export default function App() {
 // HOME PAGE
 // ============================================================
 function HomePage({ setView }) {
-  const event = DB.getEvent();
+  const [event, setEvent] = useState(DB.getEvent());
   const [photos, setPhotos] = useState([]);
+  useEffect(() => DB.onEvent(setEvent), []);
   useEffect(() => DB.onPhotos(all => setPhotos(all.filter(p => p.status === "approved"))), []);
 
   const latest = photos[0];
@@ -409,7 +410,8 @@ function UploadPage({ setView }) {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
   const fileRef = useRef();
-  const event = DB.getEvent();
+const [event, setEvent] = useState(DB.getEvent());
+useEffect(() => DB.onEvent(setEvent), []);
 
   const handleFile = useCallback(async (file) => {
     if (!file?.type.startsWith("image/")) return;
@@ -530,7 +532,8 @@ function GalleryPage({ setView }) {
   const [liked, setLiked] = useState(() => { try { return JSON.parse(localStorage.getItem("wl") || "{}"); } catch { return {}; } });
   const [lightbox, setLightbox] = useState(null);
   const [sort, setSort] = useState("recent"); // recent | popular
-  const event = DB.getEvent();
+ const [event, setEvent] = useState(DB.getEvent());
+useEffect(() => DB.onEvent(setEvent), []);
 
   useEffect(() => DB.onPhotos(all => setPhotos(all.filter(p => p.status === "approved"))), []);
 
@@ -740,7 +743,8 @@ function LiveTV({ setView }) {
   const [speed, setSpeed] = useState(5000);
   const [newPhoto, setNewPhoto] = useState(null); // notification nouvelle photo
   const ctTimer = useRef(), prevCount = useRef(0);
-  const event = DB.getEvent();
+  const [event, setEvent] = useState(DB.getEvent());
+useEffect(() => DB.onEvent(setEvent), []);
 
   useEffect(() => {
     return DB.onPhotos(all => {
@@ -975,7 +979,8 @@ function AdminPage({ auth, setAuth, setView }) {
   const [error, setError]       = useState("");
   const [photos, setPhotos]     = useState([]);
   const [tab, setTab]           = useState("photos");
-  const [event, setEvent]       = useState(DB.getEvent());
+  const [event, setEvent] = useState(DB.getEvent());
+useEffect(() => DB.onEvent(setEvent), []);
   const [toast, showToast]      = useToast();
 
   useEffect(() => { if (!auth) return; return DB.onPhotos(setPhotos); }, [auth]);
