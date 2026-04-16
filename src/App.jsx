@@ -18,7 +18,7 @@ let _firebaseApp = null, _db = null, _storage = null, _firebaseReady = false;
 async function initFirebase() {
   if (!isRealConfig || _firebaseReady) return _firebaseReady;
   try {
-    const [{ initializeApp }, { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, increment }, { getStorage, ref, uploadString, getDownloadURL }] =
+    const [{ initializeApp },{ getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, increment, setDoc }, { getStorage, ref, uploadString, getDownloadURL }] =
       await Promise.all([
         import("https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"),
         import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"),
@@ -27,7 +27,7 @@ async function initFirebase() {
     _firebaseApp = initializeApp(FIREBASE_CONFIG);
     _db = getFirestore(_firebaseApp);
     _storage = getStorage(_firebaseApp);
-    window.__fb = { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, increment, ref, uploadString, getDownloadURL };
+   window.__fb = { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, increment, setDoc, ref, uploadString, getDownloadURL };
     _firebaseReady = true;
     return true;
   } catch (e) { console.error("Firebase:", e); return false; }
