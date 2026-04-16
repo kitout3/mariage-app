@@ -66,36 +66,66 @@ const MockDB = {
   updateEvent: (u) => { mockEvent = { ...mockEvent, ...u }; },
 };
 
+// Listeners pour l'événement en temps réel
+let eventListeners = [];
+let cachedEvent = { ...mockEvent };
+
 const DB = {
   addPhoto: async (p) => {
     if (!_firebaseReady) return MockDB.addPhoto(p);
-    const { collection, addDoc, serverTimestamp, ref, uploadString, getDownloadURL } = window.__fb;
-    const sRef = ref(_storage, `events/${p.eventId}/photos/${Date.now()}.jpg`);
-    await uploadString(sRef, p.url, "data_url");
-    const url = await getDownloadURL(sRef);
-    const d = await addDoc(collection(_db, "photos"), { ...p, url, thumbnail: url, status: mockEvent.moderationMode === "moderated" ? "pending" : "approved", likes: 0, createdAt: serverTimestamp() });
-    return { id: d.id, ...p, url };
+    const { collection, addDoc, serverTimestamp } = window.__fb;
+    const d = await addDoc(collection(_db, "photos"), {
+      ...p, status: cachedEvent.moderationMode === "moderated" ? "pending" : "approved",
+      likes: 0, createdAt: serverTimestamp()
+    });
+    return { id: d.id, ...p };
   },
   updatePhoto: async (id, u) => {
     if (!_firebaseReady) return MockDB.updatePhoto(id, u);
-    const { doc, updateDoc } = window.__fb; await updateDoc(doc(_db, "photos", id), u);
+    const { doc, updateDoc } = window.__fb;
+    await updateDoc(doc(_db, "photos", id), u);
   },
   deletePhoto: async (id) => {
     if (!_firebaseReady) return MockDB.deletePhoto(id);
-    const { doc, deleteDoc } = window.__fb; await deleteDoc(doc(_db, "photos", id));
+    const { doc, deleteDoc } = window.__fb;
+    await deleteDoc(doc(_db, "photos", id));
   },
   likePhoto: async (id) => {
     if (!_firebaseReady) return MockDB.likePhoto(id);
-    const { doc, updateDoc, increment } = window.__fb; await updateDoc(doc(_db, "photos", id), { likes: increment(1) });
+    const { doc, updateDoc, increment } = window.__fb;
+    await updateDoc(doc(_db, "photos", id), { likes: increment(1) });
   },
   onPhotos: (cb) => {
     if (!_firebaseReady) return MockDB.onPhotos(cb);
     const { collection, query, orderBy, onSnapshot } = window.__fb;
     const q = query(collection(_db, "photos"), orderBy("createdAt", "desc"));
-    return onSnapshot(q, snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString() }))));
+    return onSnapshot(q, snap => cb(snap.docs.map(d => ({
+      id: d.id, ...d.data(),
+      createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString()
+    }))));
   },
-  getEvent: () => MockDB.getEvent(),
-  updateEvent: (u) => MockDB.updateEvent(u),
+
+  // ✅ NOUVEAU — lit et écoute l'événement depuis Firestore
+  getEvent: () => cachedEvent,
+  onEvent: (cb) => {
+    if (!_firebaseReady) { cb(MockDB.getEvent()); return () => {}; }
+    const { doc, onSnapshot } = window.__fb;
+    return onSnapshot(doc(_db, "events", "mariage-2025"), snap => {
+      if (snap.exists()) {
+        cachedEvent = { ...mockEvent, ...snap.data() };
+      } else {
+        cachedEvent = { ...mockEvent };
+      }
+      cb(cachedEvent);
+    });
+  },
+  updateEvent: async (u) => {
+    MockDB.updateEvent(u);
+    cachedEvent = { ...cachedEvent, ...u };
+    if (!_firebaseReady) return;
+    const { doc, setDoc } = window.__fb;
+    await setDoc(doc(_db, "events", "mariage-2025"), u, { merge: true });
+  },
 };
 
 // ============================================================
