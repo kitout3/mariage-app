@@ -375,7 +375,7 @@ function HomePage({ setView }) {
         <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 680, animation: "fadeUp .6s .1s ease both" }}>
           {latest && (
             <div
-              style={{ flex: 1, borderRadius: 18, overflow: "hidden", position: "relative", aspectRatio: "4/3", background: "#1a1008", cursor: "pointer" }}
+              style={{ flex: 1, borderRadius: 18, overflow: "auto", position: "relative", aspectRatio: "4/3", background: "#1a1008", cursor: "pointer" }}
               onClick={() => setView(VIEWS.GALLERY)}
             >
               <img src={latest.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -388,7 +388,7 @@ function HomePage({ setView }) {
           )}
           {topLiked && topLiked.id !== latest?.id && (topLiked.likes || 0) > 0 && (
             <div
-              style={{ flex: 1, borderRadius: 18, overflow: "hidden", position: "relative", aspectRatio: "4/3", background: "#1a1008", cursor: "pointer" }}
+              style={{ flex: 1, borderRadius: 18, overflow: "auto", position: "relative", aspectRatio: "4/3", background: "#1a1008", cursor: "pointer" }}
               onClick={() => setView(VIEWS.GALLERY)}
             >
               <img src={topLiked.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -669,7 +669,7 @@ function UploadPage({ setView }) {
             <p style={{ color: "var(--muted)", marginBottom: 20, fontSize: ".9rem" }}>
               {event.moderationMode === "moderated" ? "Votre photo sera visible après validation." : "Votre photo est maintenant en ligne !"}
             </p>
-            <div style={{ width: 110, height: 110, margin: "0 auto 20px", borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 18px var(--shadow)" }}>
+            <div style={{ width: 110, height: 110, margin: "0 auto 20px", borderRadius: 14, overflow: "auto", boxShadow: "0 4px 18px var(--shadow)" }}>
               <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
@@ -694,7 +694,7 @@ function UploadPage({ setView }) {
           <div className="fade-up" style={{ background: "var(--white)", borderRadius: 24, padding: "2.5rem 2rem", textAlign: "center", boxShadow: "0 8px 40px var(--shadow)" }}>
             <div style={{ fontSize: 38, marginBottom: 14, animation: "spin 1s linear infinite", display: "inline-block" }}>📡</div>
             <p style={{ color: "var(--text)", marginBottom: 20 }}>Envoi en cours…</p>
-            <div style={{ background: "var(--blush)", borderRadius: 50, height: 10, overflow: "hidden" }}>
+            <div style={{ background: "var(--blush)", borderRadius: 50, height: 10, overflow: "auto" }}>
               <div style={{ height: "100%", borderRadius: 50, background: "linear-gradient(90deg, var(--rose), var(--gold))", width: `${progress}%`, transition: "width .15s ease" }} />
             </div>
             <p style={{ color: "var(--muted)", fontSize: ".78rem", marginTop: 8 }}>{progress}%</p>
@@ -702,7 +702,7 @@ function UploadPage({ setView }) {
         )}
 
         {step === "preview" && (
-          <div className="fade-up" style={{ background: "var(--white)", borderRadius: 24, overflow: "hidden", boxShadow: "0 8px 40px var(--shadow)" }}>
+          <div className="fade-up" style={{ background: "var(--white)", borderRadius: 24, overflow: "auto", boxShadow: "0 8px 40px var(--shadow)" }}>
             <div style={{ position: "relative", aspectRatio: "4/3", background: "#1a1008" }}>
               <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", opacity: applyingFilter ? 0.5 : 1, transition: "opacity .2s" }} />
               {applyingFilter && (
@@ -863,9 +863,9 @@ function GalleryPage({ setView }) {
         <div style={{ padding: "14px 12px 0" }}>
           <div style={{ display: "flex", gap: 8 }}>
             {latest && (
-              <div style={{ flex: 1, borderRadius: 16, overflow: "hidden", position: "relative", cursor: "pointer", boxShadow: "0 3px 16px var(--shadow)" }}
+              <div style={{ flex: 1, borderRadius: 16, overflow: "auto", position: "relative", cursor: "pointer", boxShadow: "0 3px 16px var(--shadow)" }}
                 onClick={() => setLightbox(latest)}>
-                <img src={latest.url} alt="" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
+               <img src={latest.url} alt="" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block", maxHeight: 200 }} />
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(0deg,rgba(0,0,0,.6) 0%,transparent 55%)" }} />
                 <span style={{ position: "absolute", top: 9, left: 9, background: "rgba(201,122,106,.92)", color: "white", borderRadius: 50, padding: "3px 11px", fontSize: ".7rem", animation: "newBadge .4s ease" }}>
                   ✨ Dernière
@@ -884,9 +884,9 @@ function GalleryPage({ setView }) {
             )}
 
             {topLiked && (topLiked.likes || 0) > 0 && topLiked.id !== latest?.id && (
-              <div style={{ flex: 1, borderRadius: 16, overflow: "hidden", position: "relative", cursor: "pointer", boxShadow: "0 3px 16px var(--shadow)" }}
+              <div style={{ flex: 1, borderRadius: 16, overflow: "auto", position: "relative", cursor: "pointer", boxShadow: "0 3px 16px var(--shadow)" }}
                 onClick={() => setLightbox(topLiked)}>
-                <img src={topLiked.url} alt="" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
+               <img src={topLiked.url} alt="" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block", maxHeight: 200 }} />
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(0deg,rgba(0,0,0,.6) 0%,transparent 55%)" }} />
                 <span style={{ position: "absolute", top: 9, left: 9, background: "rgba(180,40,40,.85)", color: "white", borderRadius: 50, padding: "3px 11px", fontSize: ".7rem" }}>
                   ❤️ {topLiked.likes} likes
@@ -916,12 +916,12 @@ function GalleryPage({ setView }) {
       )}
 
       {sorted.length > 0 && (
-        <div style={{ columnCount: "auto", columnWidth: 260, columnGap: 8, padding: "12px 8px" }}>
+        <div style={{ columnCount: "auto", columnWidth: 160, columnGap: 8, padding: "12px 8px" }}>
           {sorted.map((photo, i) => {
             const isTop = photo.id === topLiked?.id && (topLiked?.likes || 0) > 0;
             return (
               <div key={photo.id} className="photo-in" style={{
-                breakInside: "avoid", marginBottom: 8, borderRadius: 14, overflow: "hidden",
+                breakInside: "avoid", marginBottom: 8, borderRadius: 14, overflow: "auto",
                 background: "var(--white)", boxShadow: isTop ? "0 4px 20px rgba(200,80,80,.2)" : "0 2px 12px var(--shadow)",
                 border: isTop ? "1.5px solid rgba(200,80,80,.25)" : "none",
                 animationDelay: `${Math.min(i * 0.035, 0.4)}s`,
@@ -932,8 +932,8 @@ function GalleryPage({ setView }) {
                 </div>
                 <div style={{ padding: "9px 12px", display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    {photo.author && <p style={{ fontSize: ".83rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{photo.author}</p>}
-                    {photo.message && <p style={{ fontSize: ".73rem", color: "var(--muted)", fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>"{photo.message}"</p>}
+                    {photo.author && <p style={{ fontSize: ".83rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "auto", textOverflow: "ellipsis" }}>{photo.author}</p>}
+                    {photo.message && <p style={{ fontSize: ".73rem", color: "var(--muted)", fontStyle: "italic", whiteSpace: "nowrap", overflow: "auto", textOverflow: "ellipsis" }}>"{photo.message}"</p>}
                     {!photo.author && !photo.message && (
                       <p style={{ fontSize: ".72rem", color: "var(--muted)" }}>{new Date(photo.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p>
                     )}
@@ -1077,7 +1077,7 @@ function MosaicMode({ photos }) {
         height: "100%",
         background: "#0d0805",
         position: "relative",
-        overflow: "hidden",
+        overflow: "auto",
       }}
     >
       <div
@@ -1144,25 +1144,24 @@ function MosaicMode({ photos }) {
         </button>
       </div>
 
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          overflow: "auto",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "5vh 5vw",
-        }}
-      >
+ <div
+  style={{
+    position: "absolute",
+    inset: 0,
+    overflow: "auto",
+    padding: "80px 40px",
+  }}
+>
         <div
           style={{
             display: "grid",
             gridTemplateColumns: `repeat(${MOSAIC_COLS}, 22px)`,
             gridTemplateRows: `repeat(${MOSAIC_ROWS}, 22px)`,
             gap: 2,
-            transform: `scale(${zoom})`,
-            transformOrigin: "center center",
+       transform: `scale(${zoom})`,
+width: MOSAIC_COLS * 22,
+height: MOSAIC_ROWS * 22,
+         transformOrigin: "top left",
             transition: "transform .22s ease",
             padding: 12,
           }}
@@ -1178,7 +1177,7 @@ function MosaicMode({ photos }) {
                 width: 22,
                 height: 22,
                 padding: 0,
-                overflow: "hidden",
+                overflow: "auto",
                 borderRadius: 4,
                 background: "#1a1008",
                 border: "1px solid rgba(255,255,255,.04)",
@@ -1244,7 +1243,7 @@ function MosaicMode({ photos }) {
               maxHeight: "90vh",
               background: "#140c08",
               borderRadius: 20,
-              overflow: "hidden",
+              overflow: "auto",
               boxShadow: "0 18px 60px rgba(0,0,0,.45)",
               border: "1px solid rgba(255,255,255,.06)",
             }}
@@ -1397,7 +1396,7 @@ function LiveTV({ setView }) {
   const currentSlide = playlist[slideIdx % Math.max(playlist.length, 1)];
 
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#0d0805", position: "relative" }}>
+    <div style={{ width: "100vw", height: "100vh", overflow: "auto", background: "#0d0805", position: "relative" }}>
       {mode === "wall" && <WallMode photos={photos} />}
       {mode === "slideshow" && <SlideshowMode photo={currentSlide} index={slideIdx} speed={speed} total={playlist.length} />}
       {mode === "mixed" && <MixedMode photos={photos} />}
@@ -1478,9 +1477,9 @@ function LiveTV({ setView }) {
 
 function WallMode({ photos }) {
   return (
-    <div style={{ width: "100%", height: "100%", overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gridAutoRows: "250px", gap: 3, padding: 3, alignContent: "start" }}>
+    <div style={{ width: "100%", height: "100%", overflow: "auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gridAutoRows: "250px", gap: 3, padding: 3, alignContent: "start" }}>
       {photos.map((p, i) => (
-        <div key={p.id} className="photo-in" style={{ animationDelay: `${Math.min(i * 0.05, 0.6)}s`, position: "relative", borderRadius: 8, overflow: "hidden", background: "#111" }}>
+        <div key={p.id} className="photo-in" style={{ animationDelay: `${Math.min(i * 0.05, 0.6)}s`, position: "relative", borderRadius: 8, overflow: "auto", background: "#111" }}>
           <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "1rem .75rem .5rem", background: "linear-gradient(0deg,rgba(0,0,0,.72),transparent)" }}>
             {p.author && <span style={{ color: "rgba(255,255,255,.9)", fontSize: ".85rem", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic" }}>{p.author}</span>}
@@ -1497,7 +1496,7 @@ function SlideshowMode({ photo, index, speed, total }) {
   const kbs = ["kb1", "kb2", "kb3"];
   const kb = kbs[index % 3];
   return (
-    <div style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
+    <div style={{ width: "100%", height: "100%", position: "relative", overflow: "auto" }}>
       <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${photo.url})`, backgroundSize: "cover", backgroundPosition: "center", filter: "blur(26px) brightness(.3) saturate(.5)", transform: "scale(1.1)" }} />
       <img key={photo.id} src={photo.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", animation: `fadeIn .9s ease, ${kb} ${speed / 1000}s ease both`, transformOrigin: "center" }} />
       {(photo.likes || 0) >= 5 && (
@@ -1536,7 +1535,7 @@ function MixedMode({ photos }) {
   return (
     <div style={{ display: "flex", width: "100%", height: "100%", gap: 3, padding: 3 }}>
       {featured && (
-        <div style={{ flex: "0 0 56%", position: "relative", borderRadius: 8, overflow: "hidden" }}>
+        <div style={{ flex: "0 0 56%", position: "relative", borderRadius: 8, overflow: "auto" }}>
           <img key={featured.id} src={featured.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn .7s ease" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,.65) 0%, transparent 55%)" }} />
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "1.75rem" }}>
@@ -1550,9 +1549,9 @@ function MixedMode({ photos }) {
           </div>
         </div>
       )}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gridAutoRows: "calc(50% - 1.5px)", gap: 3, overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gridAutoRows: "calc(50% - 1.5px)", gap: 3, overflow: "auto" }}>
         {rest.slice(0, 4).map(p => (
-          <div key={p.id} style={{ borderRadius: 8, overflow: "hidden", position: "relative" }}>
+          <div key={p.id} style={{ borderRadius: 8, overflow: "auto", position: "relative" }}>
             <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             {(p.author || (p.likes || 0) > 0) && (
               <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: ".4rem .6rem", background: "linear-gradient(0deg,rgba(0,0,0,.65),transparent)", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
@@ -1621,7 +1620,7 @@ function AdminPage({ auth, setAuth, setView }) {
 
       <div style={{ background: "var(--white)", borderBottom: "1px solid var(--blush)", padding: ".9rem 1.25rem", display: "flex", alignItems: "center", gap: 10, position: "sticky", top: 0, zIndex: 50, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.5rem", color: "var(--burgundy)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.name}</h1>
+          <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.5rem", color: "var(--burgundy)", overflow: "auto", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.name}</h1>
           <p style={{ color: "var(--muted)", fontSize: ".75rem" }}>{event.date}</p>
         </div>
         <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
@@ -1690,7 +1689,7 @@ function AdminPhotos({ photos, onUpdate, onDelete }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 10 }}>
         {filtered.map(p => (
-          <div key={p.id} className="fade-in" style={{ background: "var(--white)", borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 10px var(--shadow)", border: selected.has(p.id) ? "2px solid var(--rose)" : p.status === "pending" ? "2px solid #f1c40f" : "2px solid transparent" }}>
+          <div key={p.id} className="fade-in" style={{ background: "var(--white)", borderRadius: 14, overflow: "auto", boxShadow: "0 2px 10px var(--shadow)", border: selected.has(p.id) ? "2px solid var(--rose)" : p.status === "pending" ? "2px solid #f1c40f" : "2px solid transparent" }}>
             <div style={{ position: "relative", aspectRatio: "1", cursor: "pointer" }} onClick={() => setLb(p)}>
               <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               <div onClick={e => { e.stopPropagation(); toggle(p.id); }} style={{ position: "absolute", top: 7, left: 7, width: 20, height: 20, borderRadius: 5, background: selected.has(p.id) ? "var(--rose)" : "rgba(255,255,255,.5)", border: "2px solid white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: ".7rem", color: "white", cursor: "pointer" }}>
@@ -1702,8 +1701,8 @@ function AdminPhotos({ photos, onUpdate, onDelete }) {
               {(p.likes || 0) > 0 && <div style={{ position: "absolute", bottom: 7, right: 7, background: "rgba(0,0,0,.5)", color: "white", padding: "1px 7px", borderRadius: 50, fontSize: ".65rem" }}>❤️ {p.likes}</div>}
             </div>
             <div style={{ padding: "7px 9px" }}>
-              {p.author && <p style={{ fontSize: ".8rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>👤 {p.author}</p>}
-              {p.message && <p style={{ fontSize: ".7rem", color: "var(--muted)", fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 4 }}>"{p.message}"</p>}
+              {p.author && <p style={{ fontSize: ".8rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "auto", textOverflow: "ellipsis" }}>👤 {p.author}</p>}
+              {p.message && <p style={{ fontSize: ".7rem", color: "var(--muted)", fontStyle: "italic", whiteSpace: "nowrap", overflow: "auto", textOverflow: "ellipsis", marginBottom: 4 }}>"{p.message}"</p>}
               <div style={{ display: "flex", gap: 4 }}>
                 {p.status !== "approved" && <button onClick={() => onUpdate(p.id, { status: "approved" })} style={{ flex: 1, padding: "4px 0", borderRadius: 7, fontSize: ".7rem", background: "#27ae60", color: "white" }}>✓</button>}
                 {p.status !== "rejected" && <button onClick={() => onUpdate(p.id, { status: "rejected" })} style={{ flex: 1, padding: "4px 0", borderRadius: 7, fontSize: ".7rem", background: "#f39c12", color: "white" }}>⏸</button>}
@@ -1773,7 +1772,7 @@ function AdminStats({ photos }) {
           <h3 style={{ fontFamily: "'Cormorant Garamond',serif", color: "var(--burgundy)", marginBottom: 12, fontSize: "1.25rem" }}>❤️ Photos les plus aimées</h3>
           <div style={{ display: "flex", gap: 10 }}>
             {topLiked.filter(p => p.likes > 0).map((p, i) => (
-              <div key={p.id} style={{ position: "relative", width: 90, height: 90, borderRadius: 12, overflow: "hidden" }}>
+              <div key={p.id} style={{ position: "relative", width: 90, height: 90, borderRadius: 12, overflow: "auto" }}>
                 <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 <div style={{ position: "absolute", bottom: 3, right: 3, background: "rgba(0,0,0,.6)", color: "white", padding: "1px 6px", borderRadius: 50, fontSize: ".65rem", backdropFilter: "blur(4px)" }}>❤️ {p.likes}</div>
                 {i === 0 && <div style={{ position: "absolute", top: 3, left: 3, fontSize: ".85rem" }}>🥇</div>}
