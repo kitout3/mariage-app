@@ -448,35 +448,38 @@ async function applyFilter(dataUrl, filterId, eventName, eventDate) {
         ctx.globalAlpha = 1;
       }
 
-      // Overlay cadre mariage
+      // Bandeau bas blanc sur noir — portrait et paysage
       if (f.overlay === "border") {
-        const bw = Math.max(canvas.width, canvas.height) * 0.045;
-        // Bordure extérieure dorée
-        ctx.strokeStyle = "#b89a6a";
-        ctx.lineWidth = bw;
-        ctx.strokeRect(bw / 2, bw / 2, canvas.width - bw, canvas.height - bw);
-        // Bordure intérieure fine
-        ctx.strokeStyle = "rgba(255,255,255,0.7)";
-        ctx.lineWidth = bw * 0.15;
-        ctx.strokeRect(bw * 1.15, bw * 1.15, canvas.width - bw * 2.3, canvas.height - bw * 2.3);
-        // Texte mariage en bas
-        const fontSize = Math.max(14, canvas.width * 0.038);
-        ctx.font = `300 ${fontSize}px 'Georgia', serif`;
-        ctx.fillStyle = "white";
+        const isPortrait = canvas.height >= canvas.width;
+        const bandeauH = Math.round(canvas.height * (isPortrait ? 0.13 : 0.14));
+        const bandeauY = canvas.height - bandeauH;
+
+        // Fond noir uni
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, bandeauY, canvas.width, bandeauH);
+
         ctx.textAlign = "center";
-        ctx.shadowColor = "rgba(0,0,0,0.6)";
-        ctx.shadowBlur = 6;
-        ctx.fillText(eventName, canvas.width / 2, canvas.height - bw * 1.6);
-        ctx.font = `300 ${fontSize * 0.78}px 'Georgia', serif`;
-        ctx.fillText(eventDate, canvas.width / 2, canvas.height - bw * 0.9);
+        ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
-        // Petits coeurs décoratifs dans les coins
-        ctx.font = `${bw * 0.7}px serif`;
-        ctx.globalAlpha = 0.8;
-        [[bw*0.55, bw*0.55],[canvas.width-bw*0.9, bw*0.55],[bw*0.55, canvas.height-bw*1.1],[canvas.width-bw*0.9, canvas.height-bw*1.1]].forEach(([x,y]) => {
-          ctx.fillText("💍", x, y);
-        });
-        ctx.globalAlpha = 1;
+        ctx.fillStyle = "white";
+
+        if (isPortrait) {
+          // Ligne 1 : nom des mariés
+          const fs1 = Math.max(16, canvas.width * 0.048);
+          ctx.font = "300 " + fs1 + "px Georgia, serif";
+          ctx.fillText(eventName, canvas.width / 2, bandeauY + bandeauH * 0.42);
+          // Ligne 2 : date
+          const fs2 = Math.max(12, canvas.width * 0.034);
+          ctx.font = "300 " + fs2 + "px Georgia, serif";
+          ctx.globalAlpha = 0.65;
+          ctx.fillText(eventDate, canvas.width / 2, bandeauY + bandeauH * 0.78);
+          ctx.globalAlpha = 1;
+        } else {
+          // Une ligne : nom · date
+          const fs = Math.max(14, canvas.height * 0.048);
+          ctx.font = "300 " + fs + "px Georgia, serif";
+          ctx.fillText(eventName + "  ·  " + eventDate, canvas.width / 2, bandeauY + bandeauH * 0.62);
+        }
       }
 
       resolve(canvas.toDataURL("image/jpeg", 0.82));
