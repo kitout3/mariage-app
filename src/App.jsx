@@ -401,84 +401,117 @@ function HomePage({ setView }) {
 }
 
 // ============================================================
-// UPLOAD PAGE
-// ============================================================
-// ============================================================
-// FILTRES — appliqués sur canvas avant envoi
+// FILTRES — multi-sélection, compatible iOS Safari
 // ============================================================
 const FILTERS = [
-  { id: "none",     label: "Original",  emoji: "🖼️",  css: "" },
-  { id: "bw",       label: "N&B",       emoji: "⬛",  css: "grayscale(100%)" },
-  { id: "sepia",    label: "Sépia",     emoji: "🟤",  css: "sepia(80%) brightness(1.05)" },
-  { id: "warm",     label: "Chaud",     emoji: "🌅",  css: "saturate(130%) brightness(1.05) hue-rotate(-10deg)" },
-  { id: "cool",     label: "Froid",     emoji: "🩵",  css: "saturate(80%) brightness(1.05) hue-rotate(20deg)" },
-  { id: "vignette", label: "Vignette",  emoji: "🔲",  css: "brightness(0.92) contrast(1.1)" },
-  { id: "heart",    label: "Coeurs",    emoji: "💕",  css: "saturate(120%) brightness(1.08) hue-rotate(-5deg)", overlay: "hearts" },
-  { id: "border",   label: "Cadre",     emoji: "💍",  css: "", overlay: "border" },
+  { id: "none",     label: "Original", emoji: "🖼️", type: "color" },
+  { id: "bw",       label: "N&B",      emoji: "⬛", type: "color" },
+  { id: "sepia",    label: "Sépia",    emoji: "🟤", type: "color" },
+  { id: "warm",     label: "Chaud",    emoji: "🌅", type: "color" },
+  { id: "cool",     label: "Froid",    emoji: "🩵", type: "color" },
+  { id: "vignette", label: "Vignette", emoji: "🔲", type: "color" },
+  { id: "heart",    label: "Coeurs",   emoji: "💕", type: "overlay" },
+  { id: "border",   label: "Cadre",    emoji: "💍", type: "overlay" },
 ];
 
-// Applique le filtre + overlay sur canvas et retourne une data URL
-async function applyFilter(dataUrl, filterId, eventName, eventDate) {
+// Applique un filtre couleur pixel par pixel (compatible tous mobiles)
+function applyColorFilter(imageData, filterId) {
+  const d = imageData.data;
+  const len = d.length;
+  for (let i = 0; i < len; i += 4) {
+    let r = d[i], g = d[i+1], b = d[i+2];
+    if (filterId === "bw") {
+      const gr = r * 0.299 + g * 0.587 + b * 0.114;
+      d[i] = d[i+1] = d[i+2] = gr;
+    } else if (filterId === "sepia") {
+      d[i]   = Math.min(255, r*0.393 + g*0.769 + b*0.189);
+      d[i+1] = Math.min(255, r*0.349 + g*0.686 + b*0.168);
+      d[i+2] = Math.min(255, r*0.272 + g*0.534 + b*0.131);
+    } else if (filterId === "warm") {
+      d[i]   = Math.min(255, r * 1.12);
+      d[i+1] = Math.min(255, g * 1.02);
+      d[i+2] = Math.min(255, b * 0.88);
+    } else if (filterId === "cool") {
+      d[i]   = Math.min(255, r * 0.88);
+      d[i+1] = Math.min(255, g * 1.02);
+      d[i+2] = Math.min(255, b * 1.14);
+    } else if (filterId === "vignette") {
+      // vignette appliqué après, pas pixel par pixel
+    }
+  }
+  return imageData;
+}
+
+// Applique une vignette sur le canvas
+function applyVignette(ctx, w, h) {
+  const grad = ctx.createRadialGradient(w/2, h/2, h*0.3, w/2, h/2, h*0.85);
+  grad.addColorStop(0, "rgba(0,0,0,0)");
+  grad.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+}
+
+// Applique tous les filtres sélectionnés et retourne une data URL
+async function applyFilters(dataUrl, filterIds, eventName, eventDate) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      // Taille max 800px
       const ratio = Math.min(1, 800 / Math.max(img.width, img.height));
       canvas.width  = img.width  * ratio;
       canvas.height = img.height * ratio;
       const ctx = canvas.getContext("2d");
-      const f = FILTERS.find(f => f.id === filterId) || FILTERS[0];
+      const W = canvas.width, H = canvas.height;
 
-      // Filtre CSS via canvas filter
-      if (f.css) ctx.filter = f.css;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      ctx.filter = "none";
+      // 1. Dessiner l'image
+      ctx.drawImage(img, 0, 0, W, H);
 
-      // Overlay coeurs
-      if (f.overlay === "hearts") {
+      // 2. Filtres couleur pixel par pixel
+      const colorFilters = filterIds.filter(id => ["bw","sepia","warm","cool"].includes(id));
+      if (colorFilters.length > 0) {
+        let imgData = ctx.getImageData(0, 0, W, H);
+        colorFilters.forEach(id => { imgData = applyColorFilter(imgData, id); });
+        ctx.putImageData(imgData, 0, 0);
+      }
+
+      // 3. Vignette
+      if (filterIds.includes("vignette")) applyVignette(ctx, W, H);
+
+      // 4. Overlay coeurs
+      if (filterIds.includes("heart")) {
         const hearts = ["💕","❤️","🩷","💖","💗"];
-        ctx.font = `${canvas.width * 0.06}px serif`;
+        ctx.font = (W * 0.06) + "px serif";
         ctx.globalAlpha = 0.55;
         for (let i = 0; i < 18; i++) {
-          const x = Math.random() * canvas.width;
-          const y = Math.random() * canvas.height;
-          ctx.fillText(hearts[i % hearts.length], x, y);
+          ctx.fillText(hearts[i % hearts.length],
+            Math.random() * W * 0.9 + W * 0.05,
+            Math.random() * H * 0.85 + H * 0.05);
         }
         ctx.globalAlpha = 1;
       }
 
-      // Bandeau bas blanc sur noir — portrait et paysage
-      if (f.overlay === "border") {
-        const isPortrait = canvas.height >= canvas.width;
-        const bandeauH = Math.round(canvas.height * (isPortrait ? 0.13 : 0.14));
-        const bandeauY = canvas.height - bandeauH;
-
-        // Fond noir uni
+      // 5. Bandeau cadre — noir, texte blanc
+      if (filterIds.includes("border")) {
+        const isPortrait = H >= W;
+        const bandeauH = Math.round(H * (isPortrait ? 0.13 : 0.14));
+        const bandeauY = H - bandeauH;
         ctx.fillStyle = "black";
-        ctx.fillRect(0, bandeauY, canvas.width, bandeauH);
-
+        ctx.fillRect(0, bandeauY, W, bandeauH);
         ctx.textAlign = "center";
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
         ctx.fillStyle = "white";
-
         if (isPortrait) {
-          // Ligne 1 : nom des mariés
-          const fs1 = Math.max(16, canvas.width * 0.048);
+          const fs1 = Math.max(16, W * 0.048);
           ctx.font = "300 " + fs1 + "px Georgia, serif";
-          ctx.fillText(eventName, canvas.width / 2, bandeauY + bandeauH * 0.42);
-          // Ligne 2 : date
-          const fs2 = Math.max(12, canvas.width * 0.034);
+          ctx.fillText(eventName, W / 2, bandeauY + bandeauH * 0.42);
+          const fs2 = Math.max(12, W * 0.034);
           ctx.font = "300 " + fs2 + "px Georgia, serif";
           ctx.globalAlpha = 0.65;
-          ctx.fillText(eventDate, canvas.width / 2, bandeauY + bandeauH * 0.78);
+          ctx.fillText(eventDate, W / 2, bandeauY + bandeauH * 0.78);
           ctx.globalAlpha = 1;
         } else {
-          // Une ligne : nom · date
-          const fs = Math.max(14, canvas.height * 0.048);
+          const fs = Math.max(14, H * 0.048);
           ctx.font = "300 " + fs + "px Georgia, serif";
-          ctx.fillText(eventName + "  ·  " + eventDate, canvas.width / 2, bandeauY + bandeauH * 0.62);
+          ctx.fillText(eventName + "  ·  " + eventDate, W / 2, bandeauY + bandeauH * 0.62);
         }
       }
 
@@ -488,11 +521,15 @@ async function applyFilter(dataUrl, filterId, eventName, eventDate) {
   });
 }
 
+// ============================================================
+// UPLOAD PAGE
+// ============================================================
+
 function UploadPage({ setView }) {
   const [step, setStep] = useState("idle");
-  const [rawPreview, setRawPreview] = useState(null); // image originale
-  const [preview, setPreview] = useState(null);        // image avec filtre appliqué
-  const [selectedFilter, setSelectedFilter] = useState("none");
+  const [rawPreview, setRawPreview] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [selectedFilters, setSelectedFilters] = useState(new Set());
   const [applyingFilter, setApplyingFilter] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [message, setMessage] = useState("");
@@ -509,18 +546,29 @@ function UploadPage({ setView }) {
       const c = await compressImage(file);
       setRawPreview(c);
       setPreview(c);
-      setSelectedFilter("none");
+      setSelectedFilters(new Set());
       setStep("preview");
     } catch { setError("Erreur lecture image"); setStep("idle"); }
   }, []);
 
-  // Applique le filtre choisi
-  const handleFilterChange = async (filterId) => {
+  // Toggle un filtre dans la sélection multiple
+  const handleFilterToggle = async (filterId) => {
     if (!rawPreview) return;
-    setSelectedFilter(filterId);
     setApplyingFilter(true);
-    const filtered = await applyFilter(rawPreview, filterId, event.name, event.date);
-    setPreview(filtered);
+    const next = new Set(selectedFilters);
+    if (filterId === "none") {
+      next.clear();
+    } else {
+      if (next.has(filterId)) next.delete(filterId);
+      else next.add(filterId);
+    }
+    setSelectedFilters(next);
+    if (next.size === 0) {
+      setPreview(rawPreview);
+    } else {
+      const filtered = await applyFilters(rawPreview, [...next], event.name, event.date);
+      setPreview(filtered);
+    }
     setApplyingFilter(false);
   };
 
@@ -536,7 +584,7 @@ function UploadPage({ setView }) {
 
   const reset = () => {
     setStep("idle"); setRawPreview(null); setPreview(null);
-    setSelectedFilter("none"); setFirstName(""); setMessage(""); setProgress(0); setError(null);
+    setSelectedFilters(new Set()); setFirstName(""); setMessage(""); setProgress(0); setError(null);
   };
 
   return (
@@ -601,23 +649,41 @@ function UploadPage({ setView }) {
               <button onClick={reset} style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,.5)", color: "white", borderRadius: 50, width: 34, height: 34, fontSize: "1.1rem", backdropFilter: "blur(8px)" }}>✕</button>
             </div>
 
-            {/* Sélecteur de filtres */}
+            {/* Sélecteur de filtres — multi-sélection */}
             <div style={{ padding: "12px 14px 0" }}>
-              <p style={{ fontSize: ".75rem", color: "var(--muted)", marginBottom: 8, letterSpacing: 1, textTransform: "uppercase" }}>✨ Choisir un filtre</p>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 10 }}>
-                {FILTERS.map(f => (
-                  <button key={f.id} onClick={() => handleFilterChange(f.id)} style={{
-                    flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-                    padding: "8px 12px", borderRadius: 12,
-                    border: `2px solid ${selectedFilter === f.id ? "var(--rose)" : "var(--blush)"}`,
-                    background: selectedFilter === f.id ? "#fff0ed" : "var(--cream)",
-                    cursor: "pointer", transition: "all .15s",
-                  }}>
-                    <span style={{ fontSize: 22 }}>{f.emoji}</span>
-                    <span style={{ fontSize: ".65rem", color: selectedFilter === f.id ? "var(--rose)" : "var(--muted)", whiteSpace: "nowrap", fontWeight: selectedFilter === f.id ? 500 : 400 }}>{f.label}</span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <p style={{ fontSize: ".75rem", color: "var(--muted)", letterSpacing: 1, textTransform: "uppercase" }}>✨ Filtres</p>
+                {selectedFilters.size > 0 && (
+                  <button onClick={() => handleFilterToggle("none")} style={{ background: "none", color: "var(--muted)", fontSize: ".72rem", borderBottom: "1px solid var(--blush)" }}>
+                    Tout effacer
                   </button>
-                ))}
+                )}
               </div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 10 }}>
+                {FILTERS.map(f => {
+                  const active = f.id === "none" ? selectedFilters.size === 0 : selectedFilters.has(f.id);
+                  return (
+                    <button key={f.id} onClick={() => handleFilterToggle(f.id)} style={{
+                      flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                      padding: "8px 12px", borderRadius: 12,
+                      border: `2px solid ${active ? "var(--rose)" : "var(--blush)"}`,
+                      background: active ? "#fff0ed" : "var(--cream)",
+                      cursor: "pointer", transition: "all .15s", position: "relative",
+                    }}>
+                      <span style={{ fontSize: 22 }}>{f.emoji}</span>
+                      <span style={{ fontSize: ".65rem", color: active ? "var(--rose)" : "var(--muted)", whiteSpace: "nowrap", fontWeight: active ? 500 : 400 }}>{f.label}</span>
+                      {active && f.id !== "none" && (
+                        <span style={{ position: "absolute", top: -5, right: -5, background: "var(--rose)", color: "white", borderRadius: "50%", width: 16, height: 16, fontSize: ".6rem", display: "flex", alignItems: "center", justifyContent: "center" }}>✓</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedFilters.size > 0 && (
+                <p style={{ fontSize: ".7rem", color: "var(--muted)", marginTop: 4, opacity: .7 }}>
+                  {selectedFilters.size} filtre{selectedFilters.size > 1 ? "s" : ""} actif{selectedFilters.size > 1 ? "s" : ""}
+                </p>
+              )}
             </div>
 
             {/* Champs texte + envoi */}
