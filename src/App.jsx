@@ -1066,9 +1066,14 @@ function MosaicMode({ photos }) {
   const filledCount = mappedTiles.length;
   const pct = totalHeartTiles > 0 ? Math.round((filledCount / totalHeartTiles) * 100) : 0;
 
-  const zoomIn = () => setZoom(z => Math.min(3, +(z + 0.15).toFixed(2)));
-  const zoomOut = () => setZoom(z => Math.max(0.5, +(z - 0.15).toFixed(2)));
-  const resetZoom = () => setZoom(1);
+const zoomIn = () => setZoom(z => Math.min(4, +(z + 0.2).toFixed(2)));
+const zoomOut = () => setZoom(z => Math.max(0.4, +(z - 0.2).toFixed(2)));
+const resetZoom = () => setZoom(1);
+
+const tileSize = 22;
+const gapSize = 2;
+const mosaicWidth = MOSAIC_COLS * tileSize + (MOSAIC_COLS - 1) * gapSize;
+const mosaicHeight = MOSAIC_ROWS * tileSize + (MOSAIC_ROWS - 1) * gapSize;
 
   return (
     <div
@@ -1144,28 +1149,34 @@ function MosaicMode({ photos }) {
         </button>
       </div>
 
- <div
+<div
   style={{
     position: "absolute",
     inset: 0,
     overflow: "auto",
-    padding: "80px 40px",
+    padding: "90px 40px 70px",
   }}
 >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${MOSAIC_COLS}, 22px)`,
-            gridTemplateRows: `repeat(${MOSAIC_ROWS}, 22px)`,
-            gap: 2,
-       transform: `scale(${zoom})`,
-width: MOSAIC_COLS * 22,
-height: MOSAIC_ROWS * 22,
-         transformOrigin: "top left",
-            transition: "transform .22s ease",
-            padding: 12,
-          }}
-        >
+  <div
+    style={{
+      width: mosaicWidth * zoom,
+      height: mosaicHeight * zoom,
+      margin: "0 auto",
+      position: "relative",
+    }}
+  >
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(${MOSAIC_COLS}, ${tileSize}px)`,
+        gridTemplateRows: `repeat(${MOSAIC_ROWS}, ${tileSize}px)`,
+        gap: `${gapSize}px`,
+        width: mosaicWidth,
+        height: mosaicHeight,
+        transform: `scale(${zoom})`,
+        transformOrigin: "top left",
+      }}
+    >
           {mappedTiles.map(tile => (
             <button
               key={tile.photo.id}
@@ -1478,7 +1489,7 @@ function LiveTV({ setView }) {
 function WallMode({ photos }) {
   return (
     <div style={{ width: "100%", height: "100%", overflow: "auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gridAutoRows: "250px", gap: 3, padding: 3, alignContent: "start" }}>
-      {photos.map((p, i) => (
+      {photos.map((p, i) => (   gridTemplateColumns: `repeat(${MOSAIC_COLS}, 22px)`,
         <div key={p.id} className="photo-in" style={{ animationDelay: `${Math.min(i * 0.05, 0.6)}s`, position: "relative", borderRadius: 8, overflow: "auto", background: "#111" }}>
           <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "1rem .75rem .5rem", background: "linear-gradient(0deg,rgba(0,0,0,.72),transparent)" }}>
