@@ -971,10 +971,10 @@ function buildPlaylist(photos, boostFactor = 3) {
   }
   return playlist;
 }
+// ============================================================
+// MOSAIC MODE — 1 tuile = 1 photo entière, coeur, zoom + clic
+// ============================================================
 
-// ============================================================
-// MOSAIC MODE — coeur uniquement, remplissage aléatoire interne
-// ============================================================
 const MOSAIC_COLS = 28;
 const MOSAIC_ROWS = 21;
 
@@ -1016,404 +1016,293 @@ function generateHeartTiles() {
   return heartTiles;
 }
 
-function buildRandomHeartOrder() {
-  return shuffleArray(generateHeartTiles());
+function buildHeartPhotoMap(photos) {
+  const heartTiles = shuffleArray(generateHeartTiles());
+  const approvedPhotos = photos.filter(p => p.status === "approved");
+
+  return approvedPhotos.slice(0, heartTiles.length).map((photo, i) => ({
+    ...heartTiles[i],
+    photo,
+  }));
 }
 
 function MosaicMode({ photos }) {
-  const canvasRef = useRef(null);
-  const orderRef = useRef([]);
-  const filledRef = useRef(new Set());
-  const prevCount = useRef(0);
-  const [, forceRender] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
 
-  useEffect(() => {
-    orderRef.current = buildRandomHeartOrder();
-    filledRef.current = new Set();
-    prevCount.current = 0;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#0d0805";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    forceRender(v => v + 1);
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || photos.length === 0) return;
-
-    const ctx = canvas.getContext("2d");
-    const W = canvas.width;
-    const H = canvas.height;
-    const tW = W / MOSAIC_COLS;
-    const tH = H / MOSAIC_ROWS;
-
-    const order = orderRef.current;
-    const filled = filledRef.current;
-
-    const newCount = photos.length - prevCount.current;
-    if (newCount <= 0) return;
-    prevCount.current = photos.length;
-
-    const photo = photos[0];
-    const tilesPerPhoto = Math.max(3, Math.min(6, 3 + Math.floor((photo.likes || 0) / 2)));
-
-    const img = new Image();
-    img.onload = () => {
-      let added = 0;
-
-      for (let i = 0; i < order.length && added < tilesPerPhoto; i++) {
-        const tile = order[i];
-        if (filled.has(tile.idx)) continue;
-
-        filled.add(tile.idx);
-
-        const tx = tile.c * tW;
-        const ty = tile.r * tH;
-
-        const cropW = Math.max(20, tW * 3);
-        const cropH = Math.max(20, tH * 3);
-        const maxSX = Math.max(0, img.width - cropW);
-        const maxSY = Math.max(0, img.height - cropH);
-
-        const sx = Math.random() * maxSX;
-        const sy = Math.random() * maxSY;
-
-        ctx.save();
-        ctx.drawImage(img, sx, sy, cropW, cropH, tx, ty, tW, tH);
-
-        ctx.fillStyle = "rgba(0,0,0,0.08)";
-        ctx.fillRect(tx, ty, tW, tH);
-
-        ctx.strokeStyle = "rgba(0,0,0,0.35)";
-        ctx.lineWidth = 0.5;
-        ctx.strokeRect(tx + 0.25, ty + 0.25, tW - 0.5, tH - 0.5);
-        ctx.restore();
-
-        added++;
-      }
-
-      forceRender(v => v + 1);
-    };
-
-    img.onerror = () => {
-      let added = 0;
-      const colors = ["#f5ddd4", "#e8a89c", "#c97a6a", "#b89a6a", "#d4b896", "#c4a882"];
-
-      for (let i = 0; i < order.length && added < tilesPerPhoto; i++) {
-        const tile = order[i];
-        if (filled.has(tile.idx)) continue;
-
-        filled.add(tile.idx);
-
-        const tx = tile.c * tW;
-        const ty = tile.r * tH;
-
-        ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
-        ctx.fillRect(tx + 0.5, ty + 0.5, tW - 1, tH - 1);
-
-        ctx.strokeStyle = "rgba(0,0,0,0.2)";
-        ctx.lineWidth = 0.5;
-        ctx.strokeRect(tx + 0.25, ty + 0.25, tW - 0.5, tH - 0.5);
-
-        added++;
-      }
-
-      forceRender(v => v + 1);
-    };
-
-    img.src = photo.url;
-  }, [photos]);
-
-  const totalHeartTiles = orderRef.current.length;
-  const filledCount = filledRef.current.size;
+  const mappedTiles = useMemo(() => buildHeartPhotoMap(photos), [photos]);
+  const totalHeartTiles = generateHeartTiles().length;
+  const filledCount = mappedTiles.length;
   const pct = totalHeartTiles > 0 ? Math.round((filledCount / totalHeartTiles) * 100) : 0;
+
+  const zoomIn = () => setZoom(z => Math.min(3, +(z + 0.15).toFixed(2)));
+  const zoomOut = () => setZoom(z => Math.max(0.5, +(z - 0.15).toFixed(2)));
+  const resetZoom = () => setZoom(1);
 
   return (
     <div
       style={{
         width: "100%",
         height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
         background: "#0d0805",
         position: "relative",
+        overflow: "hidden",
       }}
     >
-      <canvas
-        ref={canvasRef}
-        width={560}
-        height={420}
-        style={{
-          maxWidth: "90vw",
-          maxHeight: "80vh",
-          width: "auto",
-          height: "auto",
-          display: "block",
-          borderRadius: 12,
-          background: "#0d0805",
-        }}
-      />
-
+      {/* Barre outils */}
       <div
         style={{
           position: "absolute",
-          bottom: 60,
+          top: 18,
           left: "50%",
           transform: "translateX(-50%)",
-          color: "rgba(255,255,255,0.4)",
-          fontSize: ".72rem",
+          zIndex: 30,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          background: "rgba(0,0,0,.35)",
+          backdropFilter: "blur(12px)",
+          border: "1px solid rgba(255,255,255,.08)",
+          borderRadius: 999,
+          padding: "8px 12px",
+        }}
+      >
+        <button
+          onClick={zoomOut}
+          style={{
+            background: "rgba(255,255,255,.12)",
+            color: "white",
+            borderRadius: 999,
+            width: 34,
+            height: 34,
+            fontSize: "1rem",
+          }}
+        >
+          −
+        </button>
+
+        <div style={{ color: "rgba(255,255,255,.85)", fontSize: ".82rem", minWidth: 54, textAlign: "center" }}>
+          {Math.round(zoom * 100)}%
+        </div>
+
+        <button
+          onClick={zoomIn}
+          style={{
+            background: "rgba(255,255,255,.12)",
+            color: "white",
+            borderRadius: 999,
+            width: 34,
+            height: 34,
+            fontSize: "1rem",
+          }}
+        >
+          +
+        </button>
+
+        <button
+          onClick={resetZoom}
+          style={{
+            background: "rgba(255,255,255,.12)",
+            color: "white",
+            borderRadius: 999,
+            padding: "0 12px",
+            height: 34,
+            fontSize: ".76rem",
+          }}
+        >
+          Reset
+        </button>
+      </div>
+
+      {/* Mosaïque */}
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          overflow: "auto",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "5vh 5vw",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${MOSAIC_COLS}, 22px)`,
+            gridTemplateRows: `repeat(${MOSAIC_ROWS}, 22px)`,
+            gap: 2,
+            transform: `scale(${zoom})`,
+            transformOrigin: "center center",
+            transition: "transform .22s ease",
+            padding: 12,
+          }}
+        >
+          {mappedTiles.map(tile => (
+            <button
+              key={tile.photo.id}
+              onClick={() => setSelectedPhoto(tile.photo)}
+              title={tile.photo.author || "Photo"}
+              style={{
+                gridColumn: tile.c + 1,
+                gridRow: tile.r + 1,
+                width: 22,
+                height: 22,
+                padding: 0,
+                overflow: "hidden",
+                borderRadius: 4,
+                background: "#1a1008",
+                border: "1px solid rgba(255,255,255,.04)",
+                cursor: "pointer",
+                position: "relative",
+              }}
+            >
+              <img
+                src={tile.photo.url}
+                alt={tile.photo.author || "Photo invité"}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block",
+                }}
+              />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Compteur */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 18,
+          left: "50%",
+          transform: "translateX(-50%)",
+          color: "rgba(255,255,255,0.42)",
+          fontSize: ".76rem",
           fontFamily: "'Jost',sans-serif",
           letterSpacing: 1,
           textAlign: "center",
+          zIndex: 20,
+          background: "rgba(0,0,0,.22)",
+          padding: "8px 14px",
+          borderRadius: 999,
+          backdropFilter: "blur(10px)",
         }}
       >
         {filledCount} / {totalHeartTiles} tuiles · {pct}%
       </div>
-    </div>
-  );
-}
 
-function LiveTV({ setView }) {
-  const [photos, setPhotos] = useState([]);
-  const [mode, setMode] = useState(DB.getEvent().displayMode || "mixed");
-  const [slideIdx, setSlideIdx] = useState(0);
-  const [playlist, setPlaylist] = useState([]);
-  const [showControls, setShowControls] = useState(true);
-  const [speed, setSpeed] = useState(5000);
-  const [newPhoto, setNewPhoto] = useState(null);
-  const [event, setEvent] = useState(DB.getEvent());
-  const ctTimer = useRef();
-  const prevCount = useRef(0);
+      {/* Détail photo */}
+      {selectedPhoto && (
+        <div
+          onClick={() => setSelectedPhoto(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(8,4,2,.92)",
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "2rem",
+            animation: "fadeIn .2s ease",
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: "min(920px, 92vw)",
+              maxHeight: "90vh",
+              background: "#140c08",
+              borderRadius: 20,
+              overflow: "hidden",
+              boxShadow: "0 18px 60px rgba(0,0,0,.45)",
+              border: "1px solid rgba(255,255,255,.06)",
+            }}
+          >
+            <div style={{ position: "relative", background: "#000" }}>
+              <img
+                src={selectedPhoto.url}
+                alt={selectedPhoto.author || "Photo"}
+                style={{
+                  width: "100%",
+                  maxHeight: "68vh",
+                  objectFit: "contain",
+                  display: "block",
+                  background: "#000",
+                }}
+              />
+              <button
+                onClick={() => setSelectedPhoto(null)}
+                style={{
+                  position: "absolute",
+                  top: 14,
+                  right: 14,
+                  width: 38,
+                  height: 38,
+                  borderRadius: 999,
+                  background: "rgba(255,255,255,.16)",
+                  color: "white",
+                  fontSize: "1.1rem",
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                ✕
+              </button>
+            </div>
 
-  useEffect(() => DB.onEvent(setEvent), []);
+            <div style={{ padding: "1.2rem 1.3rem 1.4rem" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 10 }}>
+                <div>
+                  <h3 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "2rem", fontWeight: 300, color: "white", lineHeight: 1.05 }}>
+                    {selectedPhoto.author || "Invité"}
+                  </h3>
+                  <p style={{ color: "rgba(255,255,255,.45)", fontSize: ".78rem", marginTop: 4 }}>
+                    {selectedPhoto.createdAt
+                      ? new Date(selectedPhoto.createdAt).toLocaleString("fr-FR")
+                      : ""}
+                  </p>
+                </div>
 
-  useEffect(() => {
-    setMode(event.displayMode || "mixed");
-  }, [event.displayMode]);
-
-  useEffect(() => {
-    return DB.onPhotos(all => {
-      const approved = all
-        .filter(p => p.status === "approved")
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-      if (prevCount.current > 0 && approved.length > prevCount.current) {
-        setNewPhoto(approved[0]);
-        setTimeout(() => setNewPhoto(null), 5000);
-      }
-
-      prevCount.current = approved.length;
-      setPhotos(approved);
-      setPlaylist(buildPlaylist(approved));
-    });
-  }, []);
-
-  useEffect(() => {
-    if (mode !== "slideshow" || playlist.length === 0) return;
-    const iv = setInterval(() => {
-      setSlideIdx(i => {
-        const next = i + 1;
-        if (next >= playlist.length) {
-          setPlaylist(buildPlaylist(photos));
-          return 0;
-        }
-        return next;
-      });
-    }, speed);
-    return () => clearInterval(iv);
-  }, [mode, playlist.length, speed, photos]);
-
-  const resetControls = useCallback(() => {
-    setShowControls(true);
-    clearTimeout(ctTimer.current);
-    ctTimer.current = setTimeout(() => setShowControls(false), 3500);
-  }, []);
-
-  useEffect(() => {
-    resetControls();
-    window.addEventListener("mousemove", resetControls);
-    window.addEventListener("touchstart", resetControls);
-    return () => {
-      window.removeEventListener("mousemove", resetControls);
-      window.removeEventListener("touchstart", resetControls);
-    };
-  }, [resetControls]);
-
-  const currentSlide = playlist[slideIdx % Math.max(playlist.length, 1)];
-
-  return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#0d0805", position: "relative" }}>
-      {mode === "wall" && <WallMode photos={photos} />}
-      {mode === "slideshow" && <SlideshowMode photo={currentSlide} index={slideIdx} speed={speed} total={playlist.length} />}
-      {mode === "mixed" && <MixedMode photos={photos} />}
-      {mode === "mosaic" && <MosaicMode photos={photos} />}
-
-      {newPhoto && (
-        <div style={{
-          position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)",
-          background: "rgba(201,122,106,.92)", color: "white", borderRadius: 16, padding: "10px 20px",
-          backdropFilter: "blur(12px)", animation: "newBadge .4s ease",
-          zIndex: 200, fontSize: ".9rem", display: "flex", alignItems: "center", gap: 10,
-        }}>
-          <span style={{ fontSize: 28 }}>📸</span>
-          <div>
-            <p style={{ fontWeight: 500 }}>Nouvelle photo !</p>
-            {newPhoto.author && <p style={{ fontSize: ".78rem", opacity: .85 }}>par {newPhoto.author}</p>}
-          </div>
-        </div>
-      )}
-
-      {photos.length === 0 && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.4)", gap: 16 }}>
-          <div style={{ fontSize: 80, opacity: .3 }}>💍</div>
-          <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "2.2rem", fontWeight: 300 }}>{event.name}</p>
-          <p style={{ fontSize: "1.1rem", opacity: .5, animation: "pulse 2.5s ease infinite" }}>En attente des premières photos…</p>
-        </div>
-      )}
-
-      <div style={{
-        position: "fixed", top: 0, left: 0, right: 0, padding: "1.25rem 1.75rem",
-        background: "linear-gradient(180deg, rgba(0,0,0,.8) 0%, transparent 100%)",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        opacity: showControls ? 1 : 0, transition: "opacity .4s ease",
-        zIndex: 100, pointerEvents: showControls ? "auto" : "none",
-      }}>
-        <div style={{ color: "rgba(255,255,255,.9)", fontFamily: "'Cormorant Garamond',serif" }}>
-          <span style={{ fontSize: "1.55rem", fontWeight: 300 }}>{event.name}</span>
-          <span style={{ marginLeft: 12, fontSize: ".9rem", opacity: .5, fontFamily: "'Jost',sans-serif" }}>
-            {photos.length} photo{photos.length !== 1 ? "s" : ""}
-          </span>
-        </div>
-        <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-          {["wall", "slideshow", "mixed", "mosaic"].map(m => (
-            <button key={m} onClick={() => setMode(m)} style={{
-              padding: "5px 16px", borderRadius: 50, fontSize: ".8rem", fontFamily: "'Jost',sans-serif",
-              background: mode === m ? "rgba(255,255,255,.92)" : "rgba(255,255,255,.13)",
-              color: mode === m ? "#1a1008" : "rgba(255,255,255,.8)",
-              border: "none", transition: "all .2s", backdropFilter: "blur(10px)",
-            }}>
-              {{ wall: "🧱 Mur", slideshow: "🎞 Diapo", mixed: "⊞ Mixte", mosaic: "💖 Cœur" }[m]}
-            </button>
-          ))}
-          {mode === "slideshow" && (
-            <select value={speed} onChange={e => setSpeed(+e.target.value)} style={{ background: "rgba(255,255,255,.13)", color: "white", border: "none", borderRadius: 50, padding: "5px 12px", fontSize: ".8rem", backdropFilter: "blur(10px)" }}>
-              {[[2000, "2s"], [4000, "4s"], [6000, "6s"], [10000, "10s"], [15000, "15s"]].map(([v, l]) => <option key={v} value={v} style={{ color: "#333" }}>{l}</option>)}
-            </select>
-          )}
-        </div>
-      </div>
-
-      <button onClick={() => setView(VIEWS.HOME)} style={{
-        position: "fixed", bottom: 20, left: 20, zIndex: 200,
-        background: "rgba(255,255,255,.12)", color: "rgba(255,255,255,.7)",
-        border: "1px solid rgba(255,255,255,.15)", borderRadius: 50,
-        padding: "7px 16px", fontSize: ".78rem", fontFamily: "'Jost',sans-serif",
-        backdropFilter: "blur(10px)", transition: "opacity .3s",
-        opacity: showControls ? 1 : 0.3,
-      }}>
-        🏠 Accueil
-      </button>
-
-      <div style={{ position: "fixed", bottom: 18, right: 20, zIndex: 100, opacity: showControls ? .55 : .2, transition: "opacity .4s", color: "rgba(255,255,255,.7)", fontSize: ".72rem", fontFamily: "'Jost',sans-serif", letterSpacing: 1 }}>
-        {event.date}
-      </div>
-    </div>
-  );
-}
-
-function WallMode({ photos }) {
-  return (
-    <div style={{ width: "100%", height: "100%", overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gridAutoRows: "250px", gap: 3, padding: 3, alignContent: "start" }}>
-      {photos.map((p, i) => (
-        <div key={p.id} className="photo-in" style={{ animationDelay: `${Math.min(i * 0.05, 0.6)}s`, position: "relative", borderRadius: 8, overflow: "hidden", background: "#111" }}>
-          <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "1rem .75rem .5rem", background: "linear-gradient(0deg,rgba(0,0,0,.72),transparent)" }}>
-            {p.author && <span style={{ color: "rgba(255,255,255,.9)", fontSize: ".85rem", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic" }}>{p.author}</span>}
-            {(p.likes || 0) > 0 && <span style={{ color: "rgba(255,200,200,.8)", fontSize: ".7rem", marginLeft: 8 }}>❤️ {p.likes}</span>}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SlideshowMode({ photo, index, speed, total }) {
-  if (!photo) return null;
-  const kbs = ["kb1", "kb2", "kb3"];
-  const kb = kbs[index % 3];
-  return (
-    <div style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${photo.url})`, backgroundSize: "cover", backgroundPosition: "center", filter: "blur(26px) brightness(.3) saturate(.5)", transform: "scale(1.1)" }} />
-      <img key={photo.id} src={photo.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", animation: `fadeIn .9s ease, ${kb} ${speed / 1000}s ease both`, transformOrigin: "center" }} />
-      {(photo.likes || 0) >= 5 && (
-        <div style={{ position: "absolute", top: 24, left: 24, background: "rgba(180,40,40,.8)", color: "white", borderRadius: 50, padding: "5px 16px", fontSize: ".85rem", backdropFilter: "blur(8px)" }}>
-          ❤️ {photo.likes} personnes ont aimé cette photo
-        </div>
-      )}
-      {(photo.author || photo.message) && (
-        <div style={{ position: "absolute", bottom: "9%", left: "50%", transform: "translateX(-50%)", textAlign: "center", color: "white", animation: "fadeIn .9s ease", background: "rgba(0,0,0,.42)", backdropFilter: "blur(16px)", padding: ".9rem 2.2rem", borderRadius: 18, maxWidth: "72%" }}>
-          {photo.author && <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.8rem", fontWeight: 300 }}>— {photo.author}</p>}
-          {photo.message && <p style={{ fontSize: ".95rem", opacity: .85, marginTop: 5, fontStyle: "italic" }}>"{photo.message}"</p>}
-        </div>
-      )}
-      <div style={{ position: "absolute", bottom: "2rem", left: "50%", transform: "translateX(-50%)", display: "flex", gap: 5 }}>
-        {Array.from({ length: Math.min(total, 9) }, (_, i) => (
-          <div key={i} style={{ width: i === (index % Math.min(total, 9)) ? 20 : 5, height: 5, borderRadius: 3, background: i === (index % Math.min(total, 9)) ? "white" : "rgba(255,255,255,.25)", transition: "all .3s ease" }} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function MixedMode({ photos }) {
-  const [featureToggle, setFeatureToggle] = useState(false);
-  const latest = photos[0];
-  const topLiked = [...photos].sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
-  const featured = featureToggle && topLiked && (topLiked.likes || 0) > 0 ? topLiked : (latest || null);
-
-  useEffect(() => {
-    const iv = setInterval(() => setFeatureToggle(t => !t), 8000);
-    return () => clearInterval(iv);
-  }, []);
-
-  const rest = photos.filter(p => p.id !== featured?.id);
-
-  return (
-    <div style={{ display: "flex", width: "100%", height: "100%", gap: 3, padding: 3 }}>
-      {featured && (
-        <div style={{ flex: "0 0 56%", position: "relative", borderRadius: 8, overflow: "hidden" }}>
-          <img key={featured.id} src={featured.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn .7s ease" }} />
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,.65) 0%, transparent 55%)" }} />
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "1.75rem" }}>
-            {featureToggle && (topLiked?.likes || 0) > 0
-              ? <span style={{ background: "rgba(180,40,40,.85)", color: "white", borderRadius: 50, padding: "4px 14px", fontSize: ".78rem", display: "inline-block", marginBottom: 10 }}>❤️ Photo la plus aimée · {topLiked.likes} likes</span>
-              : <span style={{ background: "rgba(201,122,106,.85)", color: "white", borderRadius: 50, padding: "4px 14px", fontSize: ".78rem", display: "inline-block", marginBottom: 10 }}>✨ Dernière photo</span>
-            }
-            {featured.author && <p style={{ color: "white", fontFamily: "'Cormorant Garamond',serif", fontSize: "2rem", fontWeight: 300 }}>{featured.author}</p>}
-            {featured.message && <p style={{ color: "rgba(255,255,255,.8)", fontSize: ".95rem", fontStyle: "italic", marginTop: 4 }}>"{featured.message}"</p>}
-            {(featured.likes || 0) > 0 && !featureToggle && <p style={{ color: "rgba(255,200,200,.75)", fontSize: ".82rem", marginTop: 6 }}>❤️ {featured.likes} réaction{featured.likes > 1 ? "s" : ""}</p>}
-          </div>
-        </div>
-      )}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gridAutoRows: "calc(50% - 1.5px)", gap: 3, overflow: "hidden" }}>
-        {rest.slice(0, 4).map(p => (
-          <div key={p.id} style={{ borderRadius: 8, overflow: "hidden", position: "relative" }}>
-            <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            {(p.author || (p.likes || 0) > 0) && (
-              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: ".4rem .6rem", background: "linear-gradient(0deg,rgba(0,0,0,.65),transparent)", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-                {p.author && <span style={{ color: "rgba(255,255,255,.9)", fontSize: ".75rem", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic" }}>{p.author}</span>}
-                {(p.likes || 0) > 0 && <span style={{ color: "rgba(255,190,190,.85)", fontSize: ".68rem" }}>❤️ {p.likes}</span>}
+                {(selectedPhoto.likes || 0) > 0 && (
+                  <div
+                    style={{
+                      background: "rgba(180,40,40,.18)",
+                      color: "#ffd3d3",
+                      border: "1px solid rgba(220,70,70,.2)",
+                      borderRadius: 999,
+                      padding: "8px 14px",
+                      fontSize: ".82rem",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ❤️ {selectedPhoto.likes}
+                  </div>
+                )}
               </div>
-            )}
+
+              <div
+                style={{
+                  background: "rgba(255,255,255,.04)",
+                  border: "1px solid rgba(255,255,255,.05)",
+                  borderRadius: 14,
+                  padding: "1rem 1.05rem",
+                  color: "rgba(255,255,255,.88)",
+                  fontSize: ".95rem",
+                  lineHeight: 1.55,
+                  minHeight: 72,
+                }}
+              >
+                {selectedPhoto.message?.trim()
+                  ? selectedPhoto.message
+                  : "Aucun message associé à cette photo."}
+              </div>
+            </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
