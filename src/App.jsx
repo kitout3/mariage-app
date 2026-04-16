@@ -403,9 +403,94 @@ function HomePage({ setView }) {
 // ============================================================
 // UPLOAD PAGE
 // ============================================================
+// ============================================================
+// FILTRES — appliqués sur canvas avant envoi
+// ============================================================
+const FILTERS = [
+  { id: "none",     label: "Original",  emoji: "🖼️",  css: "" },
+  { id: "bw",       label: "N&B",       emoji: "⬛",  css: "grayscale(100%)" },
+  { id: "sepia",    label: "Sépia",     emoji: "🟤",  css: "sepia(80%) brightness(1.05)" },
+  { id: "warm",     label: "Chaud",     emoji: "🌅",  css: "saturate(130%) brightness(1.05) hue-rotate(-10deg)" },
+  { id: "cool",     label: "Froid",     emoji: "🩵",  css: "saturate(80%) brightness(1.05) hue-rotate(20deg)" },
+  { id: "vignette", label: "Vignette",  emoji: "🔲",  css: "brightness(0.92) contrast(1.1)" },
+  { id: "heart",    label: "Coeurs",    emoji: "💕",  css: "saturate(120%) brightness(1.08) hue-rotate(-5deg)", overlay: "hearts" },
+  { id: "border",   label: "Cadre",     emoji: "💍",  css: "", overlay: "border" },
+];
+
+// Applique le filtre + overlay sur canvas et retourne une data URL
+async function applyFilter(dataUrl, filterId, eventName, eventDate) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      // Taille max 800px
+      const ratio = Math.min(1, 800 / Math.max(img.width, img.height));
+      canvas.width  = img.width  * ratio;
+      canvas.height = img.height * ratio;
+      const ctx = canvas.getContext("2d");
+      const f = FILTERS.find(f => f.id === filterId) || FILTERS[0];
+
+      // Filtre CSS via canvas filter
+      if (f.css) ctx.filter = f.css;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      ctx.filter = "none";
+
+      // Overlay coeurs
+      if (f.overlay === "hearts") {
+        const hearts = ["💕","❤️","🩷","💖","💗"];
+        ctx.font = `${canvas.width * 0.06}px serif`;
+        ctx.globalAlpha = 0.55;
+        for (let i = 0; i < 18; i++) {
+          const x = Math.random() * canvas.width;
+          const y = Math.random() * canvas.height;
+          ctx.fillText(hearts[i % hearts.length], x, y);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // Overlay cadre mariage
+      if (f.overlay === "border") {
+        const bw = Math.max(canvas.width, canvas.height) * 0.045;
+        // Bordure extérieure dorée
+        ctx.strokeStyle = "#b89a6a";
+        ctx.lineWidth = bw;
+        ctx.strokeRect(bw / 2, bw / 2, canvas.width - bw, canvas.height - bw);
+        // Bordure intérieure fine
+        ctx.strokeStyle = "rgba(255,255,255,0.7)";
+        ctx.lineWidth = bw * 0.15;
+        ctx.strokeRect(bw * 1.15, bw * 1.15, canvas.width - bw * 2.3, canvas.height - bw * 2.3);
+        // Texte mariage en bas
+        const fontSize = Math.max(14, canvas.width * 0.038);
+        ctx.font = `300 ${fontSize}px 'Georgia', serif`;
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.shadowColor = "rgba(0,0,0,0.6)";
+        ctx.shadowBlur = 6;
+        ctx.fillText(eventName, canvas.width / 2, canvas.height - bw * 1.6);
+        ctx.font = `300 ${fontSize * 0.78}px 'Georgia', serif`;
+        ctx.fillText(eventDate, canvas.width / 2, canvas.height - bw * 0.9);
+        ctx.shadowBlur = 0;
+        // Petits coeurs décoratifs dans les coins
+        ctx.font = `${bw * 0.7}px serif`;
+        ctx.globalAlpha = 0.8;
+        [[bw*0.55, bw*0.55],[canvas.width-bw*0.9, bw*0.55],[bw*0.55, canvas.height-bw*1.1],[canvas.width-bw*0.9, canvas.height-bw*1.1]].forEach(([x,y]) => {
+          ctx.fillText("💍", x, y);
+        });
+        ctx.globalAlpha = 1;
+      }
+
+      resolve(canvas.toDataURL("image/jpeg", 0.82));
+    };
+    img.src = dataUrl;
+  });
+}
+
 function UploadPage({ setView }) {
   const [step, setStep] = useState("idle");
-  const [preview, setPreview] = useState(null);
+  const [rawPreview, setRawPreview] = useState(null); // image originale
+  const [preview, setPreview] = useState(null);        // image avec filtre appliqué
+  const [selectedFilter, setSelectedFilter] = useState("none");
+  const [applyingFilter, setApplyingFilter] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [message, setMessage] = useState("");
   const [progress, setProgress] = useState(0);
@@ -417,9 +502,24 @@ function UploadPage({ setView }) {
   const handleFile = useCallback(async (file) => {
     if (!file?.type.startsWith("image/")) return;
     setStep("compressing");
-    try { const c = await compressImage(file); setPreview(c); setStep("preview"); }
-    catch { setError("Erreur lecture image"); setStep("idle"); }
+    try {
+      const c = await compressImage(file);
+      setRawPreview(c);
+      setPreview(c);
+      setSelectedFilter("none");
+      setStep("preview");
+    } catch { setError("Erreur lecture image"); setStep("idle"); }
   }, []);
+
+  // Applique le filtre choisi
+  const handleFilterChange = async (filterId) => {
+    if (!rawPreview) return;
+    setSelectedFilter(filterId);
+    setApplyingFilter(true);
+    const filtered = await applyFilter(rawPreview, filterId, event.name, event.date);
+    setPreview(filtered);
+    setApplyingFilter(false);
+  };
 
   const upload = async () => {
     if (!preview) return;
@@ -431,7 +531,10 @@ function UploadPage({ setView }) {
     } catch { clearInterval(t); setError("Erreur d'envoi, réessaie !"); setStep("preview"); }
   };
 
-  const reset = () => { setStep("idle"); setPreview(null); setFirstName(""); setMessage(""); setProgress(0); setError(null); };
+  const reset = () => {
+    setStep("idle"); setRawPreview(null); setPreview(null);
+    setSelectedFilter("none"); setFirstName(""); setMessage(""); setProgress(0); setError(null);
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(160deg, #fdf8f4, #f5ddd4)", display: "flex", flexDirection: "column", alignItems: "center", padding: "2rem 1rem" }}>
@@ -484,17 +587,44 @@ function UploadPage({ setView }) {
 
         {step === "preview" && (
           <div className="fade-up" style={{ background: "var(--white)", borderRadius: 24, overflow: "hidden", boxShadow: "0 8px 40px var(--shadow)" }}>
+            {/* Aperçu photo avec filtre */}
             <div style={{ position: "relative", aspectRatio: "4/3", background: "#1a1008" }}>
-              <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", opacity: applyingFilter ? 0.5 : 1, transition: "opacity .2s" }} />
+              {applyingFilter && (
+                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ fontSize: 32, animation: "spin 1s linear infinite", display: "inline-block" }}>✨</div>
+                </div>
+              )}
               <button onClick={reset} style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,.5)", color: "white", borderRadius: 50, width: 34, height: 34, fontSize: "1.1rem", backdropFilter: "blur(8px)" }}>✕</button>
             </div>
-            <div style={{ padding: "1.25rem" }}>
+
+            {/* Sélecteur de filtres */}
+            <div style={{ padding: "12px 14px 0" }}>
+              <p style={{ fontSize: ".75rem", color: "var(--muted)", marginBottom: 8, letterSpacing: 1, textTransform: "uppercase" }}>✨ Choisir un filtre</p>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 10 }}>
+                {FILTERS.map(f => (
+                  <button key={f.id} onClick={() => handleFilterChange(f.id)} style={{
+                    flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                    padding: "8px 12px", borderRadius: 12,
+                    border: `2px solid ${selectedFilter === f.id ? "var(--rose)" : "var(--blush)"}`,
+                    background: selectedFilter === f.id ? "#fff0ed" : "var(--cream)",
+                    cursor: "pointer", transition: "all .15s",
+                  }}>
+                    <span style={{ fontSize: 22 }}>{f.emoji}</span>
+                    <span style={{ fontSize: ".65rem", color: selectedFilter === f.id ? "var(--rose)" : "var(--muted)", whiteSpace: "nowrap", fontWeight: selectedFilter === f.id ? 500 : 400 }}>{f.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Champs texte + envoi */}
+            <div style={{ padding: "10px 14px 14px" }}>
               {error && <p style={{ color: "#c0392b", fontSize: ".82rem", marginBottom: 10 }}>{error}</p>}
               <input placeholder="Votre prénom (optionnel)" value={firstName} onChange={e => setFirstName(e.target.value)}
                 style={{ width: "100%", padding: "11px 14px", borderRadius: 11, marginBottom: 10, border: "1.5px solid var(--blush)", background: "var(--cream)", fontSize: ".93rem" }} />
               <textarea placeholder="Un message pour les mariés… (optionnel)" value={message} onChange={e => setMessage(e.target.value)} rows={2}
                 style={{ width: "100%", padding: "11px 14px", borderRadius: 11, marginBottom: 14, border: "1.5px solid var(--blush)", background: "var(--cream)", fontSize: ".93rem", resize: "none" }} />
-              <button onClick={upload} className="btn" style={{ width: "100%", padding: "15px", borderRadius: 50, fontSize: "1rem", background: "linear-gradient(135deg, var(--rose), var(--burgundy))", color: "white", fontWeight: 500, boxShadow: "0 5px 22px rgba(92,42,30,.28)" }}>
+              <button onClick={upload} disabled={applyingFilter} className="btn" style={{ width: "100%", padding: "15px", borderRadius: 50, fontSize: "1rem", background: "linear-gradient(135deg, var(--rose), var(--burgundy))", color: "white", fontWeight: 500, boxShadow: "0 5px 22px rgba(92,42,30,.28)", opacity: applyingFilter ? .6 : 1 }}>
                 ✨ Envoyer cette photo
               </button>
             </div>
