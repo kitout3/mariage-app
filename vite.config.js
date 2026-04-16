@@ -5,5 +5,6 @@ import react from '@vitejs/plugin-react'
 // Exemple : si ton repo s'appelle "mariage-marie-thomas" → '/mariage-marie-thomas/'
 export default defineConfig({
   plugins: [react()],
-  base: '/mariage-app/',
+base: '/mariage-app/',
+
 })
