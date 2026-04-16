@@ -13,21 +13,19 @@ const FIREBASE_CONFIG = {
 };
 
 const isRealConfig = !!import.meta.env.VITE_FIREBASE_API_KEY;
-let _firebaseApp = null, _db = null, _storage = null, _firebaseReady = false;
+let _firebaseApp = null, _db = null, _firebaseReady = false;
 
 async function initFirebase() {
   if (!isRealConfig || _firebaseReady) return _firebaseReady;
   try {
-    const [{ initializeApp },{ getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, increment, setDoc }, { getStorage, ref, uploadString, getDownloadURL }] =
+    const [{ initializeApp }, { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, increment, setDoc }] =
       await Promise.all([
         import("https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"),
         import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"),
-        import("https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js"),
       ]);
     _firebaseApp = initializeApp(FIREBASE_CONFIG);
     _db = getFirestore(_firebaseApp);
-    _storage = getStorage(_firebaseApp);
-   window.__fb = { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, increment, setDoc, ref, uploadString, getDownloadURL };
+    window.__fb = { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, increment, setDoc };
     _firebaseReady = true;
     return true;
   } catch (e) { console.error("Firebase:", e); return false; }
@@ -66,17 +64,24 @@ const MockDB = {
   updateEvent: (u) => { mockEvent = { ...mockEvent, ...u }; },
 };
 
-// Listeners pour l'événement en temps réel
-let eventListeners = [];
+// Cache event local
 let cachedEvent = { ...mockEvent };
+let eventListeners = [];
 
 const DB = {
+  // ✅ Photos stockées dans Firestore (pas Storage — gratuit)
   addPhoto: async (p) => {
     if (!_firebaseReady) return MockDB.addPhoto(p);
     const { collection, addDoc, serverTimestamp } = window.__fb;
+    // Compression max 500Ko pour Firestore (limite doc = 1Mo)
     const d = await addDoc(collection(_db, "photos"), {
-      ...p, status: cachedEvent.moderationMode === "moderated" ? "pending" : "approved",
-      likes: 0, createdAt: serverTimestamp()
+      url: p.url, // data URL compressée
+      author: p.author || null,
+      message: p.message || null,
+      eventId: p.eventId,
+      status: cachedEvent.moderationMode === "moderated" ? "pending" : "approved",
+      likes: 0,
+      createdAt: serverTimestamp(),
     });
     return { id: d.id, ...p };
   },
@@ -104,19 +109,15 @@ const DB = {
       createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString()
     }))));
   },
-
-  // ✅ NOUVEAU — lit et écoute l'événement depuis Firestore
+  // ✅ Événement en temps réel depuis Firestore
   getEvent: () => cachedEvent,
   onEvent: (cb) => {
     if (!_firebaseReady) { cb(MockDB.getEvent()); return () => {}; }
     const { doc, onSnapshot } = window.__fb;
     return onSnapshot(doc(_db, "events", "mariage-2025"), snap => {
-      if (snap.exists()) {
-        cachedEvent = { ...mockEvent, ...snap.data() };
-      } else {
-        cachedEvent = { ...mockEvent };
-      }
-      cb(cachedEvent);
+      if (snap.exists()) cachedEvent = { ...mockEvent, ...snap.data() };
+      else cachedEvent = { ...mockEvent };
+      cb({ ...cachedEvent });
     });
   },
   updateEvent: async (u) => {
@@ -131,7 +132,7 @@ const DB = {
 // ============================================================
 // HELPERS
 // ============================================================
-const compressImage = (file, maxWidth = 1400, quality = 0.85) =>
+const compressImage = (file, maxWidth = 800, quality = 0.7) =>
   new Promise(resolve => {
     const img = new Image(), url = URL.createObjectURL(file);
     img.onload = () => {
@@ -409,9 +410,9 @@ function UploadPage({ setView }) {
   const [message, setMessage] = useState("");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
+  const [event, setEvent] = useState(DB.getEvent());
   const fileRef = useRef();
-const [event, setEvent] = useState(DB.getEvent());
-useEffect(() => DB.onEvent(setEvent), []);
+  useEffect(() => DB.onEvent(setEvent), []);
 
   const handleFile = useCallback(async (file) => {
     if (!file?.type.startsWith("image/")) return;
@@ -531,10 +532,9 @@ function GalleryPage({ setView }) {
   const [photos, setPhotos] = useState([]);
   const [liked, setLiked] = useState(() => { try { return JSON.parse(localStorage.getItem("wl") || "{}"); } catch { return {}; } });
   const [lightbox, setLightbox] = useState(null);
-  const [sort, setSort] = useState("recent"); // recent | popular
- const [event, setEvent] = useState(DB.getEvent());
-useEffect(() => DB.onEvent(setEvent), []);
-
+  const [sort, setSort] = useState("recent");
+  const [event, setEvent] = useState(DB.getEvent());
+  useEffect(() => DB.onEvent(setEvent), []);
   useEffect(() => DB.onPhotos(all => setPhotos(all.filter(p => p.status === "approved"))), []);
 
   const handleLike = async (photo) => {
@@ -741,10 +741,10 @@ function LiveTV({ setView }) {
   const [playlist, setPlaylist] = useState([]);
   const [showControls, setShowControls] = useState(true);
   const [speed, setSpeed] = useState(5000);
-  const [newPhoto, setNewPhoto] = useState(null); // notification nouvelle photo
-  const ctTimer = useRef(), prevCount = useRef(0);
+  const [newPhoto, setNewPhoto] = useState(null);
   const [event, setEvent] = useState(DB.getEvent());
-useEffect(() => DB.onEvent(setEvent), []);
+  const ctTimer = useRef(), prevCount = useRef(0);
+  useEffect(() => DB.onEvent(setEvent), []);
 
   useEffect(() => {
     return DB.onPhotos(all => {
@@ -979,14 +979,14 @@ function AdminPage({ auth, setAuth, setView }) {
   const [error, setError]       = useState("");
   const [photos, setPhotos]     = useState([]);
   const [tab, setTab]           = useState("photos");
-  const [event, setEvent] = useState(DB.getEvent());
-useEffect(() => DB.onEvent(setEvent), []);
+  const [event, setEvent]       = useState(DB.getEvent());
   const [toast, showToast]      = useToast();
 
   useEffect(() => { if (!auth) return; return DB.onPhotos(setPhotos); }, [auth]);
+  useEffect(() => DB.onEvent(e => setEvent(e)), []);
 
   const login = () => { if (password === event.adminPassword) { setAuth(true); setError(""); } else setError("Mot de passe incorrect"); };
-  const updateEvent = u => { DB.updateEvent(u); setEvent(DB.getEvent()); showToast("Paramètres sauvegardés"); };
+  const updateEvent = async u => { await DB.updateEvent(u); showToast("Paramètres sauvegardés"); };
   const pending = photos.filter(p => p.status === "pending").length;
 
   if (!auth) return (
