@@ -28,10 +28,7 @@ async function initFirebase() {
     window.__fb = { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, increment, setDoc };
     _firebaseReady = true;
     return true;
-  } catch (e) {
-    console.error("Firebase:", e);
-    return false;
-  }
+  } catch (e) { console.error("Firebase:", e); return false; }
 }
 
 // ============================================================
@@ -47,62 +44,38 @@ let mockPhotos = [
 ];
 let mockListeners = [];
 let mockEvent = {
-  id: "mariage-2025",
-  name: "Marie & Thomas",
-  date: "21 Juin 2025",
-  slug: "marie-thomas-2025",
-  moderationMode: "immediate",
-  displayMode: "mixed",
-  active: true,
-  adminPassword: "admin123",
-  coverMessage: "Partagez vos plus beaux souvenirs",
+  id: "mariage-2025", name: "Marie & Thomas", date: "21 Juin 2025", slug: "marie-thomas-2025",
+  moderationMode: "immediate", displayMode: "mixed", active: true,
+  adminPassword: "admin123", coverMessage: "Partagez vos plus beaux souvenirs",
 };
 
 const MockDB = {
   addPhoto: (p) => {
-    const n = {
-      ...p,
-      id: `p_${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      status: mockEvent.moderationMode === "moderated" ? "pending" : "approved",
-      likes: 0,
-    };
+    const n = { ...p, id: `p_${Date.now()}`, createdAt: new Date().toISOString(), status: mockEvent.moderationMode === "moderated" ? "pending" : "approved", likes: 0 };
     mockPhotos = [n, ...mockPhotos];
     mockListeners.forEach(cb => cb([...mockPhotos]));
     return n;
   },
-  updatePhoto: (id, u) => {
-    mockPhotos = mockPhotos.map(p => p.id === id ? { ...p, ...u } : p);
-    mockListeners.forEach(cb => cb([...mockPhotos]));
-  },
-  deletePhoto: (id) => {
-    mockPhotos = mockPhotos.filter(p => p.id !== id);
-    mockListeners.forEach(cb => cb([...mockPhotos]));
-  },
-  likePhoto: (id) => {
-    mockPhotos = mockPhotos.map(p => p.id === id ? { ...p, likes: (p.likes || 0) + 1 } : p);
-    mockListeners.forEach(cb => cb([...mockPhotos]));
-  },
-  onPhotos: (cb) => {
-    mockListeners.push(cb);
-    cb([...mockPhotos]);
-    return () => {
-      mockListeners = mockListeners.filter(l => l !== cb);
-    };
-  },
+  updatePhoto: (id, u) => { mockPhotos = mockPhotos.map(p => p.id === id ? { ...p, ...u } : p); mockListeners.forEach(cb => cb([...mockPhotos])); },
+  deletePhoto: (id) => { mockPhotos = mockPhotos.filter(p => p.id !== id); mockListeners.forEach(cb => cb([...mockPhotos])); },
+  likePhoto: (id) => { mockPhotos = mockPhotos.map(p => p.id === id ? { ...p, likes: (p.likes || 0) + 1 } : p); mockListeners.forEach(cb => cb([...mockPhotos])); },
+  onPhotos: (cb) => { mockListeners.push(cb); cb([...mockPhotos]); return () => { mockListeners = mockListeners.filter(l => l !== cb); }; },
   getEvent: () => ({ ...mockEvent }),
   updateEvent: (u) => { mockEvent = { ...mockEvent, ...u }; },
 };
 
 // Cache event local
 let cachedEvent = { ...mockEvent };
+let eventListeners = [];
 
 const DB = {
+  // ✅ Photos stockées dans Firestore (pas Storage — gratuit)
   addPhoto: async (p) => {
     if (!_firebaseReady) return MockDB.addPhoto(p);
     const { collection, addDoc, serverTimestamp } = window.__fb;
+    // Compression max 500Ko pour Firestore (limite doc = 1Mo)
     const d = await addDoc(collection(_db, "photos"), {
-      url: p.url,
+      url: p.url, // data URL compressée
       author: p.author || null,
       message: p.message || null,
       eventId: p.eventId,
@@ -112,43 +85,34 @@ const DB = {
     });
     return { id: d.id, ...p };
   },
-
   updatePhoto: async (id, u) => {
     if (!_firebaseReady) return MockDB.updatePhoto(id, u);
     const { doc, updateDoc } = window.__fb;
     await updateDoc(doc(_db, "photos", id), u);
   },
-
   deletePhoto: async (id) => {
     if (!_firebaseReady) return MockDB.deletePhoto(id);
     const { doc, deleteDoc } = window.__fb;
     await deleteDoc(doc(_db, "photos", id));
   },
-
   likePhoto: async (id) => {
     if (!_firebaseReady) return MockDB.likePhoto(id);
     const { doc, updateDoc, increment } = window.__fb;
     await updateDoc(doc(_db, "photos", id), { likes: increment(1) });
   },
-
   onPhotos: (cb) => {
     if (!_firebaseReady) return MockDB.onPhotos(cb);
     const { collection, query, orderBy, onSnapshot } = window.__fb;
     const q = query(collection(_db, "photos"), orderBy("createdAt", "desc"));
     return onSnapshot(q, snap => cb(snap.docs.map(d => ({
-      id: d.id,
-      ...d.data(),
-      createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+      id: d.id, ...d.data(),
+      createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString()
     }))));
   },
-
+  // ✅ Événement en temps réel depuis Firestore
   getEvent: () => cachedEvent,
-
   onEvent: (cb) => {
-    if (!_firebaseReady) {
-      cb(MockDB.getEvent());
-      return () => {};
-    }
+    if (!_firebaseReady) { cb(MockDB.getEvent()); return () => {}; }
     const { doc, onSnapshot } = window.__fb;
     return onSnapshot(doc(_db, "events", "mariage-2025"), snap => {
       if (snap.exists()) cachedEvent = { ...mockEvent, ...snap.data() };
@@ -156,7 +120,6 @@ const DB = {
       cb({ ...cachedEvent });
     });
   },
-
   updateEvent: async (u) => {
     MockDB.updateEvent(u);
     cachedEvent = { ...cachedEvent, ...u };
@@ -171,24 +134,17 @@ const DB = {
 // ============================================================
 const compressImage = (file, maxWidth = 800, quality = 0.7) =>
   new Promise(resolve => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
+    const img = new Image(), url = URL.createObjectURL(file);
     img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const r = Math.min(1, maxWidth / img.width);
-      canvas.width = img.width * r;
-      canvas.height = img.height * r;
+      const canvas = document.createElement("canvas"), r = Math.min(1, maxWidth / img.width);
+      canvas.width = img.width * r; canvas.height = img.height * r;
       canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(blob => {
-        URL.revokeObjectURL(url);
-        const fr = new FileReader();
-        fr.onloadend = () => resolve(fr.result);
-        fr.readAsDataURL(blob);
-      }, "image/jpeg", quality);
+      canvas.toBlob(blob => { URL.revokeObjectURL(url); const fr = new FileReader(); fr.onloadend = () => resolve(fr.result); fr.readAsDataURL(blob); }, "image/jpeg", quality);
     };
     img.src = url;
   });
 
+// URL réelle de la page (sans hash) — QR codes pointent vers ici
 const APP_URL = window.location.href.split("#")[0].replace(/\/$/, "");
 
 const QRCode = ({ value, size = 160 }) => (
@@ -261,8 +217,7 @@ function Toast({ msg, type = "success" }) {
 function useToast() {
   const [t, setT] = useState(null);
   const show = useCallback((msg, type = "success") => {
-    setT({ msg, type });
-    setTimeout(() => setT(null), 2800);
+    setT({ msg, type }); setTimeout(() => setT(null), 2800);
   }, []);
   return [t, show];
 }
@@ -302,6 +257,7 @@ export default function App() {
   const [adminAuth, setAdminAuth] = useState(false);
   const [fbReady, setFbReady] = useState(!isRealConfig);
 
+  // Routing par hash — les QR codes pointent vers /#upload, /#gallery, /#live
   const navigate = useCallback((v) => {
     setView(v);
     window.history.replaceState(null, "", v === VIEWS.HOME ? APP_URL : `${APP_URL}#${v}`);
@@ -315,8 +271,7 @@ export default function App() {
   }, []);
 
   if (!fbReady && isRealConfig) return (
-    <>
-      <GlobalStyles />
+    <><GlobalStyles />
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 48, animation: "spin 1.4s linear infinite", display: "inline-block" }}>💍</div>
         <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.5rem", color: "var(--burgundy)" }}>Connexion…</p>
@@ -326,10 +281,10 @@ export default function App() {
 
   const setView2 = (v) => navigate(v);
 
-  if (view === VIEWS.LIVE)    return <><GlobalStyles /><LiveTV setView={setView2} /></>;
-  if (view === VIEWS.UPLOAD)  return <><GlobalStyles /><UploadPage setView={setView2} /></>;
+  if (view === VIEWS.LIVE)    return <><GlobalStyles /><LiveTV   setView={setView2} /></>;
+  if (view === VIEWS.UPLOAD)  return <><GlobalStyles /><UploadPage  setView={setView2} /></>;
   if (view === VIEWS.GALLERY) return <><GlobalStyles /><GalleryPage setView={setView2} /></>;
-  if (view === VIEWS.ADMIN)   return <><GlobalStyles /><AdminPage auth={adminAuth} setAuth={setAdminAuth} setView={setView2} /></>;
+  if (view === VIEWS.ADMIN)   return <><GlobalStyles /><AdminPage   auth={adminAuth} setAuth={setAdminAuth} setView={setView2} /></>;
   return <><GlobalStyles /><HomePage setView={setView2} /></>;
 }
 
@@ -339,7 +294,6 @@ export default function App() {
 function HomePage({ setView }) {
   const [event, setEvent] = useState(DB.getEvent());
   const [photos, setPhotos] = useState([]);
-
   useEffect(() => DB.onEvent(setEvent), []);
   useEffect(() => DB.onPhotos(all => setPhotos(all.filter(p => p.status === "approved"))), []);
 
@@ -353,6 +307,7 @@ function HomePage({ setView }) {
       display: "flex", flexDirection: "column", alignItems: "center",
       padding: "2rem 1.5rem", gap: "1.75rem",
     }}>
+      {/* Hero */}
       <div style={{ textAlign: "center", animation: "fadeUp .6s ease" }}>
         <div style={{ fontSize: 42, marginBottom: 10 }}>💍</div>
         <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(2.4rem,7vw,4.5rem)", fontWeight: 300, color: "var(--burgundy)", lineHeight: 1.05, marginBottom: 6 }}>
@@ -371,13 +326,12 @@ function HomePage({ setView }) {
         )}
       </div>
 
+      {/* Aperçu dernière photo + top liked */}
       {(latest || topLiked) && (
         <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 680, animation: "fadeUp .6s .1s ease both" }}>
           {latest && (
-            <div
-              style={{ flex: 1, borderRadius: 18, overflow: "auto", position: "relative", aspectRatio: "4/3", background: "#1a1008", cursor: "pointer" }}
-              onClick={() => setView(VIEWS.GALLERY)}
-            >
+            <div style={{ flex: 1, borderRadius: 18, overflow: "hidden", position: "relative", aspectRatio: "4/3", background: "#1a1008", cursor: "pointer" }}
+              onClick={() => setView(VIEWS.GALLERY)}>
               <img src={latest.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               <div style={{ position: "absolute", inset: 0, background: "linear-gradient(0deg, rgba(0,0,0,.6) 0%, transparent 55%)" }} />
               <div style={{ position: "absolute", top: 10, left: 10, background: "rgba(201,122,106,.9)", color: "white", borderRadius: 50, padding: "3px 12px", fontSize: ".72rem", animation: "newBadge .5s ease" }}>
@@ -387,10 +341,8 @@ function HomePage({ setView }) {
             </div>
           )}
           {topLiked && topLiked.id !== latest?.id && (topLiked.likes || 0) > 0 && (
-            <div
-              style={{ flex: 1, borderRadius: 18, overflow: "auto", position: "relative", aspectRatio: "4/3", background: "#1a1008", cursor: "pointer" }}
-              onClick={() => setView(VIEWS.GALLERY)}
-            >
+            <div style={{ flex: 1, borderRadius: 18, overflow: "hidden", position: "relative", aspectRatio: "4/3", background: "#1a1008", cursor: "pointer" }}
+              onClick={() => setView(VIEWS.GALLERY)}>
               <img src={topLiked.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               <div style={{ position: "absolute", inset: 0, background: "linear-gradient(0deg, rgba(0,0,0,.6) 0%, transparent 55%)" }} />
               <div style={{ position: "absolute", top: 10, left: 10, background: "rgba(180,60,60,.85)", color: "white", borderRadius: 50, padding: "3px 12px", fontSize: ".72rem" }}>
@@ -402,6 +354,7 @@ function HomePage({ setView }) {
         </div>
       )}
 
+      {/* Cards navigation */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10, width: "100%", maxWidth: 680 }}>
         {[
           { icon: "📸", title: "Envoyer une photo", desc: "Partager un souvenir", v: VIEWS.UPLOAD, accent: "var(--rose)", delay: ".15s" },
@@ -421,6 +374,7 @@ function HomePage({ setView }) {
         ))}
       </div>
 
+      {/* QR Code */}
       <div style={{
         background: "var(--white)", borderRadius: 20, padding: "1.5rem",
         boxShadow: "0 3px 16px var(--shadow)", textAlign: "center",
@@ -450,28 +404,29 @@ function HomePage({ setView }) {
 // FILTRES — multi-sélection, compatible iOS Safari
 // ============================================================
 const FILTERS = [
-  { id: "none", label: "Original", emoji: "🖼️", type: "color" },
-  { id: "bw", label: "N&B", emoji: "⬛", type: "color" },
-  { id: "sepia", label: "Sépia", emoji: "🟤", type: "color" },
-  { id: "warm", label: "Chaud", emoji: "🌅", type: "color" },
-  { id: "cool", label: "Froid", emoji: "🩵", type: "color" },
+  { id: "none",     label: "Original", emoji: "🖼️", type: "color" },
+  { id: "bw",       label: "N&B",      emoji: "⬛", type: "color" },
+  { id: "sepia",    label: "Sépia",    emoji: "🟤", type: "color" },
+  { id: "warm",     label: "Chaud",    emoji: "🌅", type: "color" },
+  { id: "cool",     label: "Froid",    emoji: "🩵", type: "color" },
   { id: "vignette", label: "Vignette", emoji: "🔲", type: "color" },
-  { id: "heart", label: "Coeurs", emoji: "💕", type: "overlay" },
-  { id: "border", label: "Cadre", emoji: "💍", type: "overlay" },
+  { id: "heart",    label: "Coeurs",   emoji: "💕", type: "overlay" },
+  { id: "border",   label: "Cadre",    emoji: "💍", type: "overlay" },
 ];
 
+// Applique un filtre couleur pixel par pixel (compatible tous mobiles)
 function applyColorFilter(imageData, filterId) {
   const d = imageData.data;
   const len = d.length;
   for (let i = 0; i < len; i += 4) {
-    let r = d[i], g = d[i + 1], b = d[i + 2];
+    let r = d[i], g = d[i+1], b = d[i+2];
     if (filterId === "bw") {
       const gr = r * 0.299 + g * 0.587 + b * 0.114;
-      d[i] = d[i + 1] = d[i + 2] = gr;
+      d[i] = d[i+1] = d[i+2] = gr;
     } else if (filterId === "sepia") {
-      d[i]   = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189);
-      d[i+1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168);
-      d[i+2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131);
+      d[i]   = Math.min(255, r*0.393 + g*0.769 + b*0.189);
+      d[i+1] = Math.min(255, r*0.349 + g*0.686 + b*0.168);
+      d[i+2] = Math.min(255, r*0.272 + g*0.534 + b*0.131);
     } else if (filterId === "warm") {
       d[i]   = Math.min(255, r * 1.12);
       d[i+1] = Math.min(255, g * 1.02);
@@ -480,55 +435,62 @@ function applyColorFilter(imageData, filterId) {
       d[i]   = Math.min(255, r * 0.88);
       d[i+1] = Math.min(255, g * 1.02);
       d[i+2] = Math.min(255, b * 1.14);
+    } else if (filterId === "vignette") {
+      // vignette appliqué après, pas pixel par pixel
     }
   }
   return imageData;
 }
 
+// Applique une vignette sur le canvas
 function applyVignette(ctx, w, h) {
-  const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.3, w / 2, h / 2, h * 0.85);
+  const grad = ctx.createRadialGradient(w/2, h/2, h*0.3, w/2, h/2, h*0.85);
   grad.addColorStop(0, "rgba(0,0,0,0)");
   grad.addColorStop(1, "rgba(0,0,0,0.55)");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 }
 
+// Applique tous les filtres sélectionnés et retourne une data URL
 async function applyFilters(dataUrl, filterIds, eventName, eventDate) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement("canvas");
       const ratio = Math.min(1, 800 / Math.max(img.width, img.height));
-      canvas.width = img.width * ratio;
+      canvas.width  = img.width  * ratio;
       canvas.height = img.height * ratio;
       const ctx = canvas.getContext("2d");
       const W = canvas.width, H = canvas.height;
 
+      // 1. Dessiner l'image
       ctx.drawImage(img, 0, 0, W, H);
 
-      const colorFilters = filterIds.filter(id => ["bw", "sepia", "warm", "cool"].includes(id));
+      // 2. Filtres couleur pixel par pixel
+      const colorFilters = filterIds.filter(id => ["bw","sepia","warm","cool"].includes(id));
       if (colorFilters.length > 0) {
         let imgData = ctx.getImageData(0, 0, W, H);
         colorFilters.forEach(id => { imgData = applyColorFilter(imgData, id); });
         ctx.putImageData(imgData, 0, 0);
       }
 
+      // 3. Vignette
       if (filterIds.includes("vignette")) applyVignette(ctx, W, H);
 
+      // 4. Overlay coeurs
       if (filterIds.includes("heart")) {
-        const hearts = ["💕", "❤️", "🩷", "💖", "💗"];
+        const hearts = ["💕","❤️","🩷","💖","💗"];
         ctx.font = (W * 0.06) + "px serif";
         ctx.globalAlpha = 0.55;
         for (let i = 0; i < 18; i++) {
-          ctx.fillText(
-            hearts[i % hearts.length],
+          ctx.fillText(hearts[i % hearts.length],
             Math.random() * W * 0.9 + W * 0.05,
-            Math.random() * H * 0.85 + H * 0.05
-          );
+            Math.random() * H * 0.85 + H * 0.05);
         }
         ctx.globalAlpha = 1;
       }
 
+      // 5. Bandeau cadre — noir, texte blanc
       if (filterIds.includes("border")) {
         const isPortrait = H >= W;
         const bandeauH = Math.round(H * (isPortrait ? 0.13 : 0.14));
@@ -537,12 +499,10 @@ async function applyFilters(dataUrl, filterIds, eventName, eventDate) {
         ctx.fillRect(0, bandeauY, W, bandeauH);
         ctx.textAlign = "center";
         ctx.fillStyle = "white";
-
         if (isPortrait) {
           const fs1 = Math.max(16, W * 0.048);
           ctx.font = "300 " + fs1 + "px Georgia, serif";
           ctx.fillText(eventName, W / 2, bandeauY + bandeauH * 0.42);
-
           const fs2 = Math.max(12, W * 0.034);
           ctx.font = "300 " + fs2 + "px Georgia, serif";
           ctx.globalAlpha = 0.65;
@@ -564,6 +524,7 @@ async function applyFilters(dataUrl, filterIds, eventName, eventDate) {
 // ============================================================
 // UPLOAD PAGE
 // ============================================================
+
 function UploadPage({ setView }) {
   const [step, setStep] = useState("idle");
   const [rawPreview, setRawPreview] = useState(null);
@@ -576,7 +537,6 @@ function UploadPage({ setView }) {
   const [error, setError] = useState(null);
   const [event, setEvent] = useState(DB.getEvent());
   const fileRef = useRef();
-
   useEffect(() => DB.onEvent(setEvent), []);
 
   const handleFile = useCallback(async (file) => {
@@ -588,16 +548,13 @@ function UploadPage({ setView }) {
       setPreview(c);
       setSelectedFilters(new Set());
       setStep("preview");
-    } catch {
-      setError("Erreur lecture image");
-      setStep("idle");
-    }
+    } catch { setError("Erreur lecture image"); setStep("idle"); }
   }, []);
 
+  // Toggle un filtre dans la sélection multiple
   const handleFilterToggle = async (filterId) => {
     if (!rawPreview) return;
     setApplyingFilter(true);
-
     const next = new Set(selectedFilters);
     if (filterId === "none") {
       next.clear();
@@ -605,52 +562,29 @@ function UploadPage({ setView }) {
       if (next.has(filterId)) next.delete(filterId);
       else next.add(filterId);
     }
-
     setSelectedFilters(next);
-
     if (next.size === 0) {
       setPreview(rawPreview);
     } else {
       const filtered = await applyFilters(rawPreview, [...next], event.name, event.date);
       setPreview(filtered);
     }
-
     setApplyingFilter(false);
   };
 
   const upload = async () => {
     if (!preview) return;
-    setStep("uploading");
-    setError(null);
-
+    setStep("uploading"); setError(null);
     const t = setInterval(() => setProgress(p => Math.min(p + 7, 88)), 110);
     try {
-      await DB.addPhoto({
-        url: preview,
-        thumbnail: preview,
-        author: firstName.trim() || null,
-        message: message.trim() || null,
-        eventId: event.id,
-      });
-      clearInterval(t);
-      setProgress(100);
-      setTimeout(() => setStep("success"), 250);
-    } catch {
-      clearInterval(t);
-      setError("Erreur d'envoi, réessaie !");
-      setStep("preview");
-    }
+      await DB.addPhoto({ url: preview, thumbnail: preview, author: firstName.trim() || null, message: message.trim() || null, eventId: event.id });
+      clearInterval(t); setProgress(100); setTimeout(() => setStep("success"), 250);
+    } catch { clearInterval(t); setError("Erreur d'envoi, réessaie !"); setStep("preview"); }
   };
 
   const reset = () => {
-    setStep("idle");
-    setRawPreview(null);
-    setPreview(null);
-    setSelectedFilters(new Set());
-    setFirstName("");
-    setMessage("");
-    setProgress(0);
-    setError(null);
+    setStep("idle"); setRawPreview(null); setPreview(null);
+    setSelectedFilters(new Set()); setFirstName(""); setMessage(""); setProgress(0); setError(null);
   };
 
   return (
@@ -662,6 +596,7 @@ function UploadPage({ setView }) {
       </div>
 
       <div style={{ width: "100%", maxWidth: 460 }}>
+
         {step === "success" && (
           <div className="fade-up" style={{ background: "var(--white)", borderRadius: 24, padding: "2.5rem 2rem", textAlign: "center", boxShadow: "0 8px 40px var(--shadow)" }}>
             <div style={{ fontSize: 56, marginBottom: 14, animation: "heartPop .6s ease 2" }}>💖</div>
@@ -669,7 +604,7 @@ function UploadPage({ setView }) {
             <p style={{ color: "var(--muted)", marginBottom: 20, fontSize: ".9rem" }}>
               {event.moderationMode === "moderated" ? "Votre photo sera visible après validation." : "Votre photo est maintenant en ligne !"}
             </p>
-            <div style={{ width: 110, height: 110, margin: "0 auto 20px", borderRadius: 14, overflow: "auto", boxShadow: "0 4px 18px var(--shadow)" }}>
+            <div style={{ width: 110, height: 110, margin: "0 auto 20px", borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 18px var(--shadow)" }}>
               <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
@@ -694,7 +629,7 @@ function UploadPage({ setView }) {
           <div className="fade-up" style={{ background: "var(--white)", borderRadius: 24, padding: "2.5rem 2rem", textAlign: "center", boxShadow: "0 8px 40px var(--shadow)" }}>
             <div style={{ fontSize: 38, marginBottom: 14, animation: "spin 1s linear infinite", display: "inline-block" }}>📡</div>
             <p style={{ color: "var(--text)", marginBottom: 20 }}>Envoi en cours…</p>
-            <div style={{ background: "var(--blush)", borderRadius: 50, height: 10, overflow: "auto" }}>
+            <div style={{ background: "var(--blush)", borderRadius: 50, height: 10, overflow: "hidden" }}>
               <div style={{ height: "100%", borderRadius: 50, background: "linear-gradient(90deg, var(--rose), var(--gold))", width: `${progress}%`, transition: "width .15s ease" }} />
             </div>
             <p style={{ color: "var(--muted)", fontSize: ".78rem", marginTop: 8 }}>{progress}%</p>
@@ -702,7 +637,8 @@ function UploadPage({ setView }) {
         )}
 
         {step === "preview" && (
-          <div className="fade-up" style={{ background: "var(--white)", borderRadius: 24, overflow: "auto", boxShadow: "0 8px 40px var(--shadow)" }}>
+          <div className="fade-up" style={{ background: "var(--white)", borderRadius: 24, overflow: "hidden", boxShadow: "0 8px 40px var(--shadow)" }}>
+            {/* Aperçu photo avec filtre */}
             <div style={{ position: "relative", aspectRatio: "4/3", background: "#1a1008" }}>
               <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", opacity: applyingFilter ? 0.5 : 1, transition: "opacity .2s" }} />
               {applyingFilter && (
@@ -713,6 +649,7 @@ function UploadPage({ setView }) {
               <button onClick={reset} style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,.5)", color: "white", borderRadius: 50, width: 34, height: 34, fontSize: "1.1rem", backdropFilter: "blur(8px)" }}>✕</button>
             </div>
 
+            {/* Sélecteur de filtres — multi-sélection */}
             <div style={{ padding: "12px 14px 0" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                 <p style={{ fontSize: ".75rem", color: "var(--muted)", letterSpacing: 1, textTransform: "uppercase" }}>✨ Filtres</p>
@@ -749,6 +686,7 @@ function UploadPage({ setView }) {
               )}
             </div>
 
+            {/* Champs texte + envoi */}
             <div style={{ padding: "10px 14px 14px" }}>
               {error && <p style={{ color: "#c0392b", fontSize: ".82rem", marginBottom: 10 }}>{error}</p>}
               <input placeholder="Votre prénom (optionnel)" value={firstName} onChange={e => setFirstName(e.target.value)}
@@ -765,32 +703,13 @@ function UploadPage({ setView }) {
         {step === "idle" && (
           <div className="fade-up">
             <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
-            <button
-              onClick={() => { fileRef.current.setAttribute("capture", "environment"); fileRef.current.click(); }}
-              className="btn"
-              style={{
-                width: "100%", padding: "2rem", borderRadius: 22, marginBottom: 12,
-                background: "linear-gradient(135deg, var(--rose), var(--burgundy))",
-                color: "white", fontSize: "1.15rem", fontWeight: 500,
-                boxShadow: "0 10px 30px rgba(92,42,30,.35)",
-                display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
-              }}
-            >
+            <button onClick={() => { fileRef.current.setAttribute("capture", "environment"); fileRef.current.click(); }} className="btn"
+              style={{ width: "100%", padding: "2rem", borderRadius: 22, marginBottom: 12, background: "linear-gradient(135deg, var(--rose), var(--burgundy))", color: "white", fontSize: "1.15rem", fontWeight: 500, boxShadow: "0 10px 30px rgba(92,42,30,.35)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 50 }}>📸</span>
               <span>Prendre une photo</span>
             </button>
-            <button
-              onClick={() => { fileRef.current.removeAttribute("capture"); fileRef.current.click(); }}
-              onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}
-              onDragOver={e => e.preventDefault()}
-              className="btn"
-              style={{
-                width: "100%", padding: "1.4rem", borderRadius: 22,
-                background: "var(--white)", border: "2px dashed var(--blush)",
-                color: "var(--muted)", fontSize: ".97rem",
-                display: "flex", flexDirection: "column", alignItems: "center", gap: 7,
-              }}
-            >
+            <button onClick={() => { fileRef.current.removeAttribute("capture"); fileRef.current.click(); }} onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }} onDragOver={e => e.preventDefault()} className="btn"
+              style={{ width: "100%", padding: "1.4rem", borderRadius: 22, background: "var(--white)", border: "2px dashed var(--blush)", color: "var(--muted)", fontSize: ".97rem", display: "flex", flexDirection: "column", alignItems: "center", gap: 7 }}>
               <span style={{ fontSize: 32 }}>🖼️</span>
               <span>Choisir depuis ma galerie</span>
               <span style={{ fontSize: ".76rem", opacity: .6 }}>ou glisser-déposer</span>
@@ -814,7 +733,6 @@ function GalleryPage({ setView }) {
   const [lightbox, setLightbox] = useState(null);
   const [sort, setSort] = useState("recent");
   const [event, setEvent] = useState(DB.getEvent());
-
   useEffect(() => DB.onEvent(setEvent), []);
   useEffect(() => DB.onPhotos(all => setPhotos(all.filter(p => p.status === "approved"))), []);
 
@@ -837,6 +755,8 @@ function GalleryPage({ setView }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--cream)", paddingBottom: "5rem" }}>
+
+      {/* Header */}
       <div style={{ background: "var(--white)", borderBottom: "1px solid var(--blush)", padding: "1rem 1.25rem", display: "flex", alignItems: "center", gap: 10, position: "sticky", top: 0, zIndex: 50 }}>
         <button onClick={() => setView(VIEWS.HOME)} style={{ background: "none", color: "var(--muted)", fontSize: "1.3rem", padding: "4px 8px" }}>←</button>
         <div style={{ flex: 1 }}>
@@ -848,8 +768,9 @@ function GalleryPage({ setView }) {
         </button>
       </div>
 
+      {/* Tri */}
       <div style={{ display: "flex", gap: 8, padding: "12px 14px", background: "var(--white)", borderBottom: "1px solid var(--blush)" }}>
-        {[["recent", "🕐 Récentes"], ["popular", "❤️ Populaires"]].map(([v, l]) => (
+        {[["recent","🕐 Récentes"],["popular","❤️ Populaires"]].map(([v,l]) => (
           <button key={v} onClick={() => setSort(v)} className="btn" style={{
             padding: "6px 16px", borderRadius: 50, fontSize: ".82rem",
             background: sort === v ? "var(--burgundy)" : "var(--cream)",
@@ -859,18 +780,21 @@ function GalleryPage({ setView }) {
         ))}
       </div>
 
+      {/* Mise en avant : dernière photo + la plus likée */}
       {(latest || topLiked) && photos.length > 0 && (
         <div style={{ padding: "14px 12px 0" }}>
           <div style={{ display: "flex", gap: 8 }}>
+            {/* Dernière photo */}
             {latest && (
-              <div style={{ flex: 1, borderRadius: 16, overflow: "auto", position: "relative", cursor: "pointer", boxShadow: "0 3px 16px var(--shadow)" }}
+              <div style={{ flex: 1, borderRadius: 16, overflow: "hidden", position: "relative", cursor: "pointer", boxShadow: "0 3px 16px var(--shadow)" }}
                 onClick={() => setLightbox(latest)}>
-               <img src={latest.url} alt="" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block", maxHeight: 200 }} />
+                <img src={latest.url} alt="" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(0deg,rgba(0,0,0,.6) 0%,transparent 55%)" }} />
                 <span style={{ position: "absolute", top: 9, left: 9, background: "rgba(201,122,106,.92)", color: "white", borderRadius: 50, padding: "3px 11px", fontSize: ".7rem", animation: "newBadge .4s ease" }}>
                   ✨ Dernière
                 </span>
                 {latest.author && <p style={{ position: "absolute", bottom: 9, left: 11, color: "white", fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontStyle: "italic" }}>{latest.author}</p>}
+                {/* Bouton like inline */}
                 <button onClick={e => { e.stopPropagation(); handleLike(latest); }} style={{
                   position: "absolute", bottom: 8, right: 8,
                   background: liked[latest.id] ? "rgba(220,60,60,.85)" : "rgba(0,0,0,.45)",
@@ -883,10 +807,11 @@ function GalleryPage({ setView }) {
               </div>
             )}
 
+            {/* Photo la plus likée */}
             {topLiked && (topLiked.likes || 0) > 0 && topLiked.id !== latest?.id && (
-              <div style={{ flex: 1, borderRadius: 16, overflow: "auto", position: "relative", cursor: "pointer", boxShadow: "0 3px 16px var(--shadow)" }}
+              <div style={{ flex: 1, borderRadius: 16, overflow: "hidden", position: "relative", cursor: "pointer", boxShadow: "0 3px 16px var(--shadow)" }}
                 onClick={() => setLightbox(topLiked)}>
-               <img src={topLiked.url} alt="" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block", maxHeight: 200 }} />
+                <img src={topLiked.url} alt="" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(0deg,rgba(0,0,0,.6) 0%,transparent 55%)" }} />
                 <span style={{ position: "absolute", top: 9, left: 9, background: "rgba(180,40,40,.85)", color: "white", borderRadius: 50, padding: "3px 11px", fontSize: ".7rem" }}>
                   ❤️ {topLiked.likes} likes
@@ -915,13 +840,14 @@ function GalleryPage({ setView }) {
         </div>
       )}
 
+      {/* Grille masonry */}
       {sorted.length > 0 && (
-        <div style={{ columnCount: "auto", columnWidth: 160, columnGap: 8, padding: "12px 8px" }}>
+        <div style={{ columnCount: "auto", columnWidth: 260, columnGap: 8, padding: "12px 8px" }}>
           {sorted.map((photo, i) => {
             const isTop = photo.id === topLiked?.id && (topLiked?.likes || 0) > 0;
             return (
               <div key={photo.id} className="photo-in" style={{
-                breakInside: "avoid", marginBottom: 8, borderRadius: 14, overflow: "auto",
+                breakInside: "avoid", marginBottom: 8, borderRadius: 14, overflow: "hidden",
                 background: "var(--white)", boxShadow: isTop ? "0 4px 20px rgba(200,80,80,.2)" : "0 2px 12px var(--shadow)",
                 border: isTop ? "1.5px solid rgba(200,80,80,.25)" : "none",
                 animationDelay: `${Math.min(i * 0.035, 0.4)}s`,
@@ -932,8 +858,8 @@ function GalleryPage({ setView }) {
                 </div>
                 <div style={{ padding: "9px 12px", display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    {photo.author && <p style={{ fontSize: ".83rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "auto", textOverflow: "ellipsis" }}>{photo.author}</p>}
-                    {photo.message && <p style={{ fontSize: ".73rem", color: "var(--muted)", fontStyle: "italic", whiteSpace: "nowrap", overflow: "auto", textOverflow: "ellipsis" }}>"{photo.message}"</p>}
+                    {photo.author && <p style={{ fontSize: ".83rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{photo.author}</p>}
+                    {photo.message && <p style={{ fontSize: ".73rem", color: "var(--muted)", fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>"{photo.message}"</p>}
                     {!photo.author && !photo.message && (
                       <p style={{ fontSize: ".72rem", color: "var(--muted)" }}>{new Date(photo.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p>
                     )}
@@ -955,6 +881,7 @@ function GalleryPage({ setView }) {
         </div>
       )}
 
+      {/* Lightbox */}
       {lightbox && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(10,5,2,.93)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center", animation: "fadeIn .22s ease" }}
           onClick={() => setLightbox(null)}>
@@ -987,14 +914,18 @@ function GalleryPage({ setView }) {
 // ============================================================
 // LIVE TV — diaporama avec photo populaire boostée
 // ============================================================
+
+// Construit la file de lecture en dupliquant les photos populaires
 function buildPlaylist(photos, boostFactor = 3) {
   if (photos.length === 0) return [];
   const maxLikes = Math.max(...photos.map(p => p.likes || 0), 1);
   const playlist = [];
   photos.forEach(p => {
+    // Les photos très likées apparaissent jusqu'à boostFactor fois plus
     const weight = p.likes > 0 ? Math.round(1 + ((p.likes / maxLikes) * (boostFactor - 1))) : 1;
     for (let i = 0; i < weight; i++) playlist.push(p);
   });
+  // Mélange en gardant la logique (Fisher-Yates)
   for (let i = playlist.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [playlist[i], playlist[j]] = [playlist[j], playlist[i]];
@@ -1002,367 +933,22 @@ function buildPlaylist(photos, boostFactor = 3) {
   return playlist;
 }
 
-// ============================================================
-// MOSAIC MODE — 1 tuile = 1 photo entière, coeur, zoom + clic
-// ============================================================
-const MOSAIC_COLS = 28;
-const MOSAIC_ROWS = 21;
-
-function shuffleArray(array) {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-function generateHeartTiles() {
-  const heartTiles = [];
-  const cx = MOSAIC_COLS / 2;
-  const cy = MOSAIC_ROWS / 2;
-
-  for (let r = 0; r < MOSAIC_ROWS; r++) {
-    for (let c = 0; c < MOSAIC_COLS; c++) {
-      const nx = (c - cx) / (MOSAIC_COLS * 0.42);
-      const ny = (r - cy) / (MOSAIC_ROWS * 0.42);
-
-      const x = nx;
-      const y = -ny * 1.05 - 0.1;
-
-      const d = Math.pow(x * x + y * y - 0.4, 3) - x * x * y * y * y;
-      const insideHeart = d < 0;
-
-      if (insideHeart) {
-        heartTiles.push({
-          idx: r * MOSAIC_COLS + c,
-          r,
-          c,
-        });
-      }
-    }
-  }
-
-  return heartTiles;
-}
-
-function buildHeartPhotoMap(photos) {
-  const heartTiles = shuffleArray(generateHeartTiles());
-  const approvedPhotos = photos.filter(p => p.status === "approved");
-
-  return approvedPhotos.slice(0, heartTiles.length).map((photo, i) => ({
-    ...heartTiles[i],
-    photo,
-  }));
-}
-
-function MosaicMode({ photos }) {
-  const [zoom, setZoom] = useState(1);
-  const [selectedPhoto, setSelectedPhoto] = useState(null);
-
-  const heartTiles = useMemo(() => generateHeartTiles(), []);
-  const mappedTiles = useMemo(() => buildHeartPhotoMap(photos), [photos]);
-  const totalHeartTiles = heartTiles.length;
-  const filledCount = mappedTiles.length;
-  const pct = totalHeartTiles > 0 ? Math.round((filledCount / totalHeartTiles) * 100) : 0;
-
-const zoomIn = () => setZoom(z => Math.min(4, +(z + 0.2).toFixed(2)));
-const zoomOut = () => setZoom(z => Math.max(0.4, +(z - 0.2).toFixed(2)));
-const resetZoom = () => setZoom(1);
-
-const tileSize = 22;
-const gapSize = 2;
-const mosaicWidth = MOSAIC_COLS * tileSize + (MOSAIC_COLS - 1) * gapSize;
-const mosaicHeight = MOSAIC_ROWS * tileSize + (MOSAIC_ROWS - 1) * gapSize;
-
-  return (
-    <div
-      style={{
-        width: "100%",
-        height: "100%",
-        background: "#0d0805",
-        position: "relative",
-        overflow: "auto",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 18,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 30,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          background: "rgba(0,0,0,.35)",
-          backdropFilter: "blur(12px)",
-          border: "1px solid rgba(255,255,255,.08)",
-          borderRadius: 999,
-          padding: "8px 12px",
-        }}
-      >
-        <button
-          onClick={zoomOut}
-          style={{
-            background: "rgba(255,255,255,.12)",
-            color: "white",
-            borderRadius: 999,
-            width: 34,
-            height: 34,
-            fontSize: "1rem",
-          }}
-        >
-          −
-        </button>
-
-        <div style={{ color: "rgba(255,255,255,.85)", fontSize: ".82rem", minWidth: 54, textAlign: "center" }}>
-          {Math.round(zoom * 100)}%
-        </div>
-
-        <button
-          onClick={zoomIn}
-          style={{
-            background: "rgba(255,255,255,.12)",
-            color: "white",
-            borderRadius: 999,
-            width: 34,
-            height: 34,
-            fontSize: "1rem",
-          }}
-        >
-          +
-        </button>
-
-        <button
-          onClick={resetZoom}
-          style={{
-            background: "rgba(255,255,255,.12)",
-            color: "white",
-            borderRadius: 999,
-            padding: "0 12px",
-            height: 34,
-            fontSize: ".76rem",
-          }}
-        >
-          Reset
-        </button>
-      </div>
-
-<div
-  style={{
-    position: "absolute",
-    inset: 0,
-    overflow: "auto",
-    padding: "90px 40px 70px",
-  }}
->
-  <div
-    style={{
-      width: mosaicWidth * zoom,
-      height: mosaicHeight * zoom,
-      margin: "0 auto",
-      position: "relative",
-    }}
-  >
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: `repeat(${MOSAIC_COLS}, ${tileSize}px)`,
-        gridTemplateRows: `repeat(${MOSAIC_ROWS}, ${tileSize}px)`,
-        gap: `${gapSize}px`,
-        width: mosaicWidth,
-        height: mosaicHeight,
-        transform: `scale(${zoom})`,
-        transformOrigin: "top left",
-      }}
-    >
-          {mappedTiles.map(tile => (
-            <button
-              key={tile.photo.id}
-              onClick={() => setSelectedPhoto(tile.photo)}
-              title={tile.photo.author || "Photo"}
-              style={{
-                gridColumn: tile.c + 1,
-                gridRow: tile.r + 1,
-                width: 22,
-                height: 22,
-                padding: 0,
-                overflow: "auto",
-                borderRadius: 4,
-                background: "#1a1008",
-                border: "1px solid rgba(255,255,255,.04)",
-                cursor: "pointer",
-                position: "relative",
-              }}
-            >
-              <img
-                src={tile.photo.url}
-                alt={tile.photo.author || "Photo invité"}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
-              />
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div
-        style={{
-          position: "absolute",
-          bottom: 18,
-          left: "50%",
-          transform: "translateX(-50%)",
-          color: "rgba(255,255,255,0.42)",
-          fontSize: ".76rem",
-          fontFamily: "'Jost',sans-serif",
-          letterSpacing: 1,
-          textAlign: "center",
-          zIndex: 20,
-          background: "rgba(0,0,0,.22)",
-          padding: "8px 14px",
-          borderRadius: 999,
-          backdropFilter: "blur(10px)",
-        }}
-      >
-        {filledCount} / {totalHeartTiles} tuiles · {pct}%
-      </div>
-
-      {selectedPhoto && (
-        <div
-          onClick={() => setSelectedPhoto(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(8,4,2,.92)",
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "2rem",
-            animation: "fadeIn .2s ease",
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              width: "min(920px, 92vw)",
-              maxHeight: "90vh",
-              background: "#140c08",
-              borderRadius: 20,
-              overflow: "auto",
-              boxShadow: "0 18px 60px rgba(0,0,0,.45)",
-              border: "1px solid rgba(255,255,255,.06)",
-            }}
-          >
-            <div style={{ position: "relative", background: "#000" }}>
-              <img
-                src={selectedPhoto.url}
-                alt={selectedPhoto.author || "Photo"}
-                style={{
-                  width: "100%",
-                  maxHeight: "68vh",
-                  objectFit: "contain",
-                  display: "block",
-                  background: "#000",
-                }}
-              />
-              <button
-                onClick={() => setSelectedPhoto(null)}
-                style={{
-                  position: "absolute",
-                  top: 14,
-                  right: 14,
-                  width: 38,
-                  height: 38,
-                  borderRadius: 999,
-                  background: "rgba(255,255,255,.16)",
-                  color: "white",
-                  fontSize: "1.1rem",
-                  backdropFilter: "blur(8px)",
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ padding: "1.2rem 1.3rem 1.4rem" }}>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 10 }}>
-                <div>
-                  <h3 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "2rem", fontWeight: 300, color: "white", lineHeight: 1.05 }}>
-                    {selectedPhoto.author || "Invité"}
-                  </h3>
-                  <p style={{ color: "rgba(255,255,255,.45)", fontSize: ".78rem", marginTop: 4 }}>
-                    {selectedPhoto.createdAt ? new Date(selectedPhoto.createdAt).toLocaleString("fr-FR") : ""}
-                  </p>
-                </div>
-
-                {(selectedPhoto.likes || 0) > 0 && (
-                  <div
-                    style={{
-                      background: "rgba(180,40,40,.18)",
-                      color: "#ffd3d3",
-                      border: "1px solid rgba(220,70,70,.2)",
-                      borderRadius: 999,
-                      padding: "8px 14px",
-                      fontSize: ".82rem",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    ❤️ {selectedPhoto.likes}
-                  </div>
-                )}
-              </div>
-
-              <div
-                style={{
-                  background: "rgba(255,255,255,.04)",
-                  border: "1px solid rgba(255,255,255,.05)",
-                  borderRadius: 14,
-                  padding: "1rem 1.05rem",
-                  color: "rgba(255,255,255,.88)",
-                  fontSize: ".95rem",
-                  lineHeight: 1.55,
-                  minHeight: 72,
-                }}
-              >
-                {selectedPhoto.message?.trim()
-                  ? selectedPhoto.message
-                  : "Aucun message associé à cette photo."}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function LiveTV({ setView }) {
   const [photos, setPhotos] = useState([]);
-  const [mode, setMode] = useState(DB.getEvent().displayMode || "mixed");
+  const [mode, setMode] = useState("mixed");
   const [slideIdx, setSlideIdx] = useState(0);
   const [playlist, setPlaylist] = useState([]);
   const [showControls, setShowControls] = useState(true);
   const [speed, setSpeed] = useState(5000);
   const [newPhoto, setNewPhoto] = useState(null);
   const [event, setEvent] = useState(DB.getEvent());
-  const ctTimer = useRef();
-  const prevCount = useRef(0);
-
+  const ctTimer = useRef(), prevCount = useRef(0);
   useEffect(() => DB.onEvent(setEvent), []);
-
-  useEffect(() => {
-    setMode(event.displayMode || "mixed");
-  }, [event.displayMode]);
 
   useEffect(() => {
     return DB.onPhotos(all => {
       const approved = all.filter(p => p.status === "approved").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      // Notification si nouvelle photo
       if (prevCount.current > 0 && approved.length > prevCount.current) {
         setNewPhoto(approved[0]);
         setTimeout(() => setNewPhoto(null), 5000);
@@ -1373,12 +959,14 @@ function LiveTV({ setView }) {
     });
   }, []);
 
+  // Avance dans la playlist (reconstruite périodiquement pour intégrer les nouveaux likes)
   useEffect(() => {
     if (mode !== "slideshow" || playlist.length === 0) return;
     const iv = setInterval(() => {
       setSlideIdx(i => {
         const next = i + 1;
         if (next >= playlist.length) {
+          // Reconstruction de la playlist avec les likes mis à jour
           setPlaylist(buildPlaylist(photos));
           return 0;
         }
@@ -1398,21 +986,19 @@ function LiveTV({ setView }) {
     resetControls();
     window.addEventListener("mousemove", resetControls);
     window.addEventListener("touchstart", resetControls);
-    return () => {
-      window.removeEventListener("mousemove", resetControls);
-      window.removeEventListener("touchstart", resetControls);
-    };
+    return () => { window.removeEventListener("mousemove", resetControls); window.removeEventListener("touchstart", resetControls); };
   }, [resetControls]);
 
   const currentSlide = playlist[slideIdx % Math.max(playlist.length, 1)];
 
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "auto", background: "#0d0805", position: "relative" }}>
-      {mode === "wall" && <WallMode photos={photos} />}
-      {mode === "slideshow" && <SlideshowMode photo={currentSlide} index={slideIdx} speed={speed} total={playlist.length} />}
-      {mode === "mixed" && <MixedMode photos={photos} />}
-      {mode === "mosaic" && <MosaicMode photos={photos} />}
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#0d0805", position: "relative" }}>
 
+      {mode === "wall"      && <WallMode      photos={photos} />}
+      {mode === "slideshow" && <SlideshowMode photo={currentSlide} index={slideIdx} speed={speed} total={playlist.length} />}
+      {mode === "mixed"     && <MixedMode     photos={photos} />}
+
+      {/* Notification nouvelle photo */}
       {newPhoto && (
         <div style={{
           position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)",
@@ -1436,6 +1022,7 @@ function LiveTV({ setView }) {
         </div>
       )}
 
+      {/* Controls bar (top) */}
       <div style={{
         position: "fixed", top: 0, left: 0, right: 0, padding: "1.25rem 1.75rem",
         background: "linear-gradient(180deg, rgba(0,0,0,.8) 0%, transparent 100%)",
@@ -1450,24 +1037,23 @@ function LiveTV({ setView }) {
           </span>
         </div>
         <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-          {["wall", "slideshow", "mixed", "mosaic"].map(m => (
+          {["wall","slideshow","mixed"].map(m => (
             <button key={m} onClick={() => setMode(m)} style={{
               padding: "5px 16px", borderRadius: 50, fontSize: ".8rem", fontFamily: "'Jost',sans-serif",
               background: mode === m ? "rgba(255,255,255,.92)" : "rgba(255,255,255,.13)",
               color: mode === m ? "#1a1008" : "rgba(255,255,255,.8)",
               border: "none", transition: "all .2s", backdropFilter: "blur(10px)",
-            }}>
-              {{ wall: "🧱 Mur", slideshow: "🎞 Diapo", mixed: "⊞ Mixte", mosaic: "💖 Cœur" }[m]}
-            </button>
+            }}>{{ wall: "🧱 Mur", slideshow: "🎞 Diapo", mixed: "⊞ Mixte" }[m]}</button>
           ))}
           {mode === "slideshow" && (
             <select value={speed} onChange={e => setSpeed(+e.target.value)} style={{ background: "rgba(255,255,255,.13)", color: "white", border: "none", borderRadius: 50, padding: "5px 12px", fontSize: ".8rem", backdropFilter: "blur(10px)" }}>
-              {[[2000, "2s"], [4000, "4s"], [6000, "6s"], [10000, "10s"], [15000, "15s"]].map(([v, l]) => <option key={v} value={v} style={{ color: "#333" }}>{l}</option>)}
+              {[[2000,"2s"],[4000,"4s"],[6000,"6s"],[10000,"10s"],[15000,"15s"]].map(([v,l]) => <option key={v} value={v} style={{ color: "#333" }}>{l}</option>)}
             </select>
           )}
         </div>
       </div>
 
+      {/* Bouton accueil TV (toujours visible discrètement en bas gauche) */}
       <button onClick={() => setView(VIEWS.HOME)} style={{
         position: "fixed", bottom: 20, left: 20, zIndex: 200,
         background: "rgba(255,255,255,.12)", color: "rgba(255,255,255,.7)",
@@ -1479,6 +1065,7 @@ function LiveTV({ setView }) {
         🏠 Accueil
       </button>
 
+      {/* Date en bas droite */}
       <div style={{ position: "fixed", bottom: 18, right: 20, zIndex: 100, opacity: showControls ? .55 : .2, transition: "opacity .4s", color: "rgba(255,255,255,.7)", fontSize: ".72rem", fontFamily: "'Jost',sans-serif", letterSpacing: 1 }}>
         {event.date}
       </div>
@@ -1488,9 +1075,9 @@ function LiveTV({ setView }) {
 
 function WallMode({ photos }) {
   return (
-    <div style={{ width: "100%", height: "100%", overflow: "auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gridAutoRows: "250px", gap: 3, padding: 3, alignContent: "start" }}>
-      {photos.map((p, i) => (   gridTemplateColumns: `repeat(${MOSAIC_COLS}, 22px)`,
-        <div key={p.id} className="photo-in" style={{ animationDelay: `${Math.min(i * 0.05, 0.6)}s`, position: "relative", borderRadius: 8, overflow: "auto", background: "#111" }}>
+    <div style={{ width: "100%", height: "100%", overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gridAutoRows: "250px", gap: 3, padding: 3, alignContent: "start" }}>
+      {photos.map((p, i) => (
+        <div key={p.id} className="photo-in" style={{ animationDelay: `${Math.min(i * 0.05, 0.6)}s`, position: "relative", borderRadius: 8, overflow: "hidden", background: "#111" }}>
           <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "1rem .75rem .5rem", background: "linear-gradient(0deg,rgba(0,0,0,.72),transparent)" }}>
             {p.author && <span style={{ color: "rgba(255,255,255,.9)", fontSize: ".85rem", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic" }}>{p.author}</span>}
@@ -1504,23 +1091,28 @@ function WallMode({ photos }) {
 
 function SlideshowMode({ photo, index, speed, total }) {
   if (!photo) return null;
-  const kbs = ["kb1", "kb2", "kb3"];
+  const kbs = ["kb1","kb2","kb3"];
   const kb = kbs[index % 3];
   return (
-    <div style={{ width: "100%", height: "100%", position: "relative", overflow: "auto" }}>
+    <div style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
+      {/* Fond flou */}
       <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${photo.url})`, backgroundSize: "cover", backgroundPosition: "center", filter: "blur(26px) brightness(.3) saturate(.5)", transform: "scale(1.1)" }} />
+      {/* Image Ken Burns */}
       <img key={photo.id} src={photo.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", animation: `fadeIn .9s ease, ${kb} ${speed / 1000}s ease both`, transformOrigin: "center" }} />
+      {/* Badge populaire */}
       {(photo.likes || 0) >= 5 && (
         <div style={{ position: "absolute", top: 24, left: 24, background: "rgba(180,40,40,.8)", color: "white", borderRadius: 50, padding: "5px 16px", fontSize: ".85rem", backdropFilter: "blur(8px)" }}>
           ❤️ {photo.likes} personnes ont aimé cette photo
         </div>
       )}
+      {/* Info overlay */}
       {(photo.author || photo.message) && (
         <div style={{ position: "absolute", bottom: "9%", left: "50%", transform: "translateX(-50%)", textAlign: "center", color: "white", animation: "fadeIn .9s ease", background: "rgba(0,0,0,.42)", backdropFilter: "blur(16px)", padding: ".9rem 2.2rem", borderRadius: 18, maxWidth: "72%" }}>
           {photo.author && <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.8rem", fontWeight: 300 }}>— {photo.author}</p>}
           {photo.message && <p style={{ fontSize: ".95rem", opacity: .85, marginTop: 5, fontStyle: "italic" }}>"{photo.message}"</p>}
         </div>
       )}
+      {/* Points de progression */}
       <div style={{ position: "absolute", bottom: "2rem", left: "50%", transform: "translateX(-50%)", display: "flex", gap: 5 }}>
         {Array.from({ length: Math.min(total, 9) }, (_, i) => (
           <div key={i} style={{ width: i === (index % Math.min(total, 9)) ? 20 : 5, height: 5, borderRadius: 3, background: i === (index % Math.min(total, 9)) ? "white" : "rgba(255,255,255,.25)", transition: "all .3s ease" }} />
@@ -1531,8 +1123,9 @@ function SlideshowMode({ photo, index, speed, total }) {
 }
 
 function MixedMode({ photos }) {
+  // Photo "vedette" : alterne entre la dernière arrivée et la plus likée
   const [featureToggle, setFeatureToggle] = useState(false);
-  const latest = photos[0];
+  const latest  = photos[0];
   const topLiked = [...photos].sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
   const featured = featureToggle && topLiked && (topLiked.likes || 0) > 0 ? topLiked : (latest || null);
 
@@ -1546,7 +1139,7 @@ function MixedMode({ photos }) {
   return (
     <div style={{ display: "flex", width: "100%", height: "100%", gap: 3, padding: 3 }}>
       {featured && (
-        <div style={{ flex: "0 0 56%", position: "relative", borderRadius: 8, overflow: "auto" }}>
+        <div style={{ flex: "0 0 56%", position: "relative", borderRadius: 8, overflow: "hidden" }}>
           <img key={featured.id} src={featured.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn .7s ease" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,.65) 0%, transparent 55%)" }} />
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "1.75rem" }}>
@@ -1560,9 +1153,9 @@ function MixedMode({ photos }) {
           </div>
         </div>
       )}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gridAutoRows: "calc(50% - 1.5px)", gap: 3, overflow: "auto" }}>
+      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gridAutoRows: "calc(50% - 1.5px)", gap: 3, overflow: "hidden" }}>
         {rest.slice(0, 4).map(p => (
-          <div key={p.id} style={{ borderRadius: 8, overflow: "auto", position: "relative" }}>
+          <div key={p.id} style={{ borderRadius: 8, overflow: "hidden", position: "relative" }}>
             <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             {(p.author || (p.likes || 0) > 0) && (
               <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: ".4rem .6rem", background: "linear-gradient(0deg,rgba(0,0,0,.65),transparent)", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
@@ -1582,27 +1175,17 @@ function MixedMode({ photos }) {
 // ============================================================
 function AdminPage({ auth, setAuth, setView }) {
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [photos, setPhotos] = useState([]);
-  const [tab, setTab] = useState("photos");
-  const [event, setEvent] = useState(DB.getEvent());
-  const [toast, showToast] = useToast();
+  const [error, setError]       = useState("");
+  const [photos, setPhotos]     = useState([]);
+  const [tab, setTab]           = useState("photos");
+  const [event, setEvent]       = useState(DB.getEvent());
+  const [toast, showToast]      = useToast();
 
   useEffect(() => { if (!auth) return; return DB.onPhotos(setPhotos); }, [auth]);
   useEffect(() => DB.onEvent(e => setEvent(e)), []);
 
-  const login = () => {
-    if (password === event.adminPassword) {
-      setAuth(true);
-      setError("");
-    } else setError("Mot de passe incorrect");
-  };
-
-  const updateEvent = async u => {
-    await DB.updateEvent(u);
-    showToast("Paramètres sauvegardés");
-  };
-
+  const login = () => { if (password === event.adminPassword) { setAuth(true); setError(""); } else setError("Mot de passe incorrect"); };
+  const updateEvent = async u => { await DB.updateEvent(u); showToast("Paramètres sauvegardés"); };
   const pending = photos.filter(p => p.status === "pending").length;
 
   if (!auth) return (
@@ -1629,9 +1212,10 @@ function AdminPage({ auth, setAuth, setView }) {
     <div style={{ minHeight: "100vh", background: "var(--cream)" }}>
       <Toast msg={toast?.msg} type={toast?.type} />
 
+      {/* Top bar */}
       <div style={{ background: "var(--white)", borderBottom: "1px solid var(--blush)", padding: ".9rem 1.25rem", display: "flex", alignItems: "center", gap: 10, position: "sticky", top: 0, zIndex: 50, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.5rem", color: "var(--burgundy)", overflow: "auto", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.name}</h1>
+          <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.5rem", color: "var(--burgundy)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.name}</h1>
           <p style={{ color: "var(--muted)", fontSize: ".75rem" }}>{event.date}</p>
         </div>
         <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
@@ -1642,8 +1226,9 @@ function AdminPage({ auth, setAuth, setView }) {
         </div>
       </div>
 
+      {/* Tabs */}
       <div style={{ padding: "1rem 1.25rem 0", display: "flex", gap: 7, overflowX: "auto" }}>
-        {[["photos", "📷 Photos"], ["stats", "📊 Stats"], ["settings", "⚙️ Paramètres"], ["export", "📦 Export"]].map(([k, l]) => (
+        {[["photos","📷 Photos"],["stats","📊 Stats"],["settings","⚙️ Paramètres"],["export","📦 Export"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className="btn" style={{
             padding: "7px 18px", borderRadius: 50, fontSize: ".85rem", whiteSpace: "nowrap",
             background: tab === k ? "var(--burgundy)" : "var(--white)",
@@ -1654,10 +1239,10 @@ function AdminPage({ auth, setAuth, setView }) {
       </div>
 
       <div style={{ padding: "1.25rem" }}>
-        {tab === "photos" && <AdminPhotos photos={photos} onUpdate={async (id, u) => { await DB.updatePhoto(id, u); showToast("Photo mise à jour"); }} onDelete={async id => { await DB.deletePhoto(id); showToast("Supprimée"); }} />}
-        {tab === "stats" && <AdminStats photos={photos} />}
+        {tab === "photos"   && <AdminPhotos   photos={photos} onUpdate={async (id, u) => { await DB.updatePhoto(id, u); showToast("Photo mise à jour"); }} onDelete={async id => { await DB.deletePhoto(id); showToast("Supprimée"); }} />}
+        {tab === "stats"    && <AdminStats    photos={photos} />}
         {tab === "settings" && <AdminSettings event={event} onUpdate={updateEvent} />}
-        {tab === "export" && <AdminExport photos={photos} event={event} />}
+        {tab === "export"   && <AdminExport   photos={photos} event={event} />}
       </div>
 
       <HomeButton setView={setView} />
@@ -1671,16 +1256,12 @@ function AdminPhotos({ photos, onUpdate, onDelete }) {
   const [lb, setLb] = useState(null);
 
   const filtered = photos.filter(p => filter === "all" ? true : p.status === filter);
-  const toggle = id => setSelected(s => {
-    const n = new Set(s);
-    n.has(id) ? n.delete(id) : n.add(id);
-    return n;
-  });
+  const toggle = id => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
     <div>
       <div style={{ display: "flex", gap: 7, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-        {[["all", "Toutes"], ["approved", "Publiées"], ["pending", "En attente"], ["rejected", "Refusées"]].map(([k, l]) => (
+        {[["all","Toutes"],["approved","Publiées"],["pending","En attente"],["rejected","Refusées"]].map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)} className="btn" style={{
             padding: "5px 14px", borderRadius: 50, fontSize: ".8rem",
             background: filter === k ? "var(--text)" : "var(--white)",
@@ -1700,7 +1281,7 @@ function AdminPhotos({ photos, onUpdate, onDelete }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 10 }}>
         {filtered.map(p => (
-          <div key={p.id} className="fade-in" style={{ background: "var(--white)", borderRadius: 14, overflow: "auto", boxShadow: "0 2px 10px var(--shadow)", border: selected.has(p.id) ? "2px solid var(--rose)" : p.status === "pending" ? "2px solid #f1c40f" : "2px solid transparent" }}>
+          <div key={p.id} className="fade-in" style={{ background: "var(--white)", borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 10px var(--shadow)", border: selected.has(p.id) ? "2px solid var(--rose)" : p.status === "pending" ? "2px solid #f1c40f" : "2px solid transparent" }}>
             <div style={{ position: "relative", aspectRatio: "1", cursor: "pointer" }} onClick={() => setLb(p)}>
               <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               <div onClick={e => { e.stopPropagation(); toggle(p.id); }} style={{ position: "absolute", top: 7, left: 7, width: 20, height: 20, borderRadius: 5, background: selected.has(p.id) ? "var(--rose)" : "rgba(255,255,255,.5)", border: "2px solid white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: ".7rem", color: "white", cursor: "pointer" }}>
@@ -1712,11 +1293,11 @@ function AdminPhotos({ photos, onUpdate, onDelete }) {
               {(p.likes || 0) > 0 && <div style={{ position: "absolute", bottom: 7, right: 7, background: "rgba(0,0,0,.5)", color: "white", padding: "1px 7px", borderRadius: 50, fontSize: ".65rem" }}>❤️ {p.likes}</div>}
             </div>
             <div style={{ padding: "7px 9px" }}>
-              {p.author && <p style={{ fontSize: ".8rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "auto", textOverflow: "ellipsis" }}>👤 {p.author}</p>}
-              {p.message && <p style={{ fontSize: ".7rem", color: "var(--muted)", fontStyle: "italic", whiteSpace: "nowrap", overflow: "auto", textOverflow: "ellipsis", marginBottom: 4 }}>"{p.message}"</p>}
+              {p.author && <p style={{ fontSize: ".8rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>👤 {p.author}</p>}
+              {p.message && <p style={{ fontSize: ".7rem", color: "var(--muted)", fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 4 }}>"{p.message}"</p>}
               <div style={{ display: "flex", gap: 4 }}>
-                {p.status !== "approved" && <button onClick={() => onUpdate(p.id, { status: "approved" })} style={{ flex: 1, padding: "4px 0", borderRadius: 7, fontSize: ".7rem", background: "#27ae60", color: "white" }}>✓</button>}
-                {p.status !== "rejected" && <button onClick={() => onUpdate(p.id, { status: "rejected" })} style={{ flex: 1, padding: "4px 0", borderRadius: 7, fontSize: ".7rem", background: "#f39c12", color: "white" }}>⏸</button>}
+                {p.status !== "approved"  && <button onClick={() => onUpdate(p.id, { status: "approved" })}  style={{ flex: 1, padding: "4px 0", borderRadius: 7, fontSize: ".7rem", background: "#27ae60", color: "white" }}>✓</button>}
+                {p.status !== "rejected"  && <button onClick={() => onUpdate(p.id, { status: "rejected" })}  style={{ flex: 1, padding: "4px 0", borderRadius: 7, fontSize: ".7rem", background: "#f39c12", color: "white" }}>⏸</button>}
                 <button onClick={() => onDelete(p.id)} style={{ flex: 1, padding: "4px 0", borderRadius: 7, fontSize: ".7rem", background: "#e74c3c", color: "white" }}>🗑</button>
               </div>
             </div>
@@ -1738,20 +1319,13 @@ function AdminStats({ photos }) {
   const approved = photos.filter(p => p.status === "approved");
   const totalLikes = photos.reduce((s, p) => s + (p.likes || 0), 0);
   const topLiked = [...photos].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 3);
-  const byHour = useMemo(() => {
-    const m = {};
-    photos.forEach(p => {
-      const h = new Date(p.createdAt).getHours();
-      m[h] = (m[h] || 0) + 1;
-    });
-    return m;
-  }, [photos]);
+  const byHour = useMemo(() => { const m = {}; photos.forEach(p => { const h = new Date(p.createdAt).getHours(); m[h] = (m[h] || 0) + 1; }); return m; }, [photos]);
   const maxH = Math.max(...Object.values(byHour), 1);
 
   return (
     <div style={{ maxWidth: 660 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10, marginBottom: 16 }}>
-        {[["📷", "Total", photos.length, "var(--burgundy)"], ["✅", "Publiées", approved.length, "#1e8449"], ["⏳", "En attente", photos.filter(p => p.status === "pending").length, "#b7950b"], ["❤️", "Réactions", totalLikes, "#c0392b"]].map(([ic, l, v, c]) => (
+        {[["📷", "Total", photos.length, "var(--burgundy)"],["✅","Publiées",approved.length,"#1e8449"],["⏳","En attente",photos.filter(p=>p.status==="pending").length,"#b7950b"],["❤️","Réactions",totalLikes,"#c0392b"]].map(([ic,l,v,c]) => (
           <div key={l} style={{ background: "var(--white)", borderRadius: 14, padding: "1.1rem", boxShadow: "0 2px 10px var(--shadow)", textAlign: "center" }}>
             <div style={{ fontSize: 26, marginBottom: 5 }}>{ic}</div>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "2rem", color: c, lineHeight: 1 }}>{v}</div>
@@ -1783,7 +1357,7 @@ function AdminStats({ photos }) {
           <h3 style={{ fontFamily: "'Cormorant Garamond',serif", color: "var(--burgundy)", marginBottom: 12, fontSize: "1.25rem" }}>❤️ Photos les plus aimées</h3>
           <div style={{ display: "flex", gap: 10 }}>
             {topLiked.filter(p => p.likes > 0).map((p, i) => (
-              <div key={p.id} style={{ position: "relative", width: 90, height: 90, borderRadius: 12, overflow: "auto" }}>
+              <div key={p.id} style={{ position: "relative", width: 90, height: 90, borderRadius: 12, overflow: "hidden" }}>
                 <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 <div style={{ position: "absolute", bottom: 3, right: 3, background: "rgba(0,0,0,.6)", color: "white", padding: "1px 6px", borderRadius: 50, fontSize: ".65rem", backdropFilter: "blur(4px)" }}>❤️ {p.likes}</div>
                 {i === 0 && <div style={{ position: "absolute", top: 3, left: 3, fontSize: ".85rem" }}>🥇</div>}
