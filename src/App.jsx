@@ -1249,39 +1249,39 @@ async function extractThumbnail(dataUrl, size) {
 }
 
 function MosaicMode({ photos, goal = 50, shape = "heart" }) {
-  // goal = nb de photos nécessaires pour compléter la mosaïque (config admin)
-  // shape = forme cible (config admin)
   const COLS = 28;
   const ROWS = 22;
-  const TILE_SIZE = 32;
+  // Taille haute résolution des tuiles — photos nettes au zoom
+  const TILE_PX = 96; // pixels canvas par tuile (3x plus grand = zoom 3x net)
 
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
   const [filledCount, setFilledCount] = useState(0);
+  const [zoom, setZoom] = useState(1);
   const targetRef = useRef(null);
   const tilesRef = useRef([]);
-  const sortedSlotsRef = useRef([]);
-  const thumbnailCacheRef = useRef({});
+  const slotsRef = useRef([]);
+  const thumbCacheRef = useRef({});
   const prevShapeRef = useRef(null);
 
-  // Réinitialise si la forme change
+  // Init / réinitialise si forme change
   useEffect(() => {
     if (prevShapeRef.current === shape) return;
     prevShapeRef.current = shape;
     const { levels } = generateTargetImage(shape, COLS, ROWS);
     targetRef.current = { levels };
+    // Fisher-Yates — ordre aléatoire
     const slots = Array.from({ length: COLS * ROWS }, (_, i) => i);
-    // Ordre aléatoire — Fisher-Yates shuffle
     for (let i = slots.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [slots[i], slots[j]] = [slots[j], slots[i]];
     }
-    sortedSlotsRef.current = slots;
+    slotsRef.current = slots;
     tilesRef.current = [];
     setFilledCount(0);
     drawCanvas([]);
   }, [shape]);
 
-  // Quand les photos changent, remplit les tuiles proportionnellement au goal
   useEffect(() => {
     if (!targetRef.current) return;
     fillTiles(photos);
@@ -1289,18 +1289,19 @@ function MosaicMode({ photos, goal = 50, shape = "heart" }) {
 
   const fillTiles = async (photos) => {
     if (photos.length === 0) { drawCanvas([]); return; }
-    const slots = sortedSlotsRef.current; // ordre aléatoire fixé à l'init
-    const toFill = Math.min(photos.length, slots.length); // 1 photo = 1 tuile max
+    const slots = slotsRef.current;
+    const toFill = Math.min(photos.length, slots.length); // 1 photo → 1 tuile
     const newTiles = [];
 
     for (let i = 0; i < toFill; i++) {
-      const photo = photos[i]; // chaque photo utilisée une seule fois
-      const cacheKey = photo.id;
-      if (!thumbnailCacheRef.current[cacheKey]) {
-        const thumb = await extractThumbnail(photo.url, TILE_SIZE * 2);
-        thumbnailCacheRef.current[cacheKey] = thumb;
+      const photo = photos[i];
+      const key = photo.id;
+      if (!thumbCacheRef.current[key]) {
+        // Haute résolution : TILE_PX * 2 pour sous-pixel rendering propre
+        const thumb = await extractThumbnail(photo.url, TILE_PX * 2);
+        thumbCacheRef.current[key] = thumb;
       }
-      newTiles.push({ slot: slots[i], thumb: thumbnailCacheRef.current[cacheKey] });
+      newTiles.push({ slot: slots[i], thumb: thumbCacheRef.current[key] });
     }
 
     tilesRef.current = newTiles;
@@ -1312,32 +1313,25 @@ function MosaicMode({ photos, goal = 50, shape = "heart" }) {
     const canvas = canvasRef.current;
     if (!canvas || !targetRef.current) return;
     const ctx = canvas.getContext("2d");
-    const W = COLS * TILE_SIZE, H = ROWS * TILE_SIZE;
+    const W = COLS * TILE_PX, H = ROWS * TILE_PX;
     canvas.width = W; canvas.height = H;
-
-    // Fond noir total — aucun symbole visible
     ctx.fillStyle = "#0a0603";
     ctx.fillRect(0, 0, W, H);
-
     const { levels } = targetRef.current;
 
-    // Zones vides : fond noir uni, aucun symbole affiché
-    // (les emplacements non remplis restent noirs)
-
-    // Dessine les tuiles remplies
     tiles.forEach(tile => {
       if (!tile.thumb) return;
       const col = tile.slot % COLS;
       const row = Math.floor(tile.slot / COLS);
-      const x = col * TILE_SIZE, y = row * TILE_SIZE;
+      const x = col * TILE_PX, y = row * TILE_PX;
       const lum = levels[tile.slot];
-
+      const pad = 2; // petit espace entre tuiles
       const img = new Image();
       img.onload = () => {
-        ctx.drawImage(img, x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
-        // Zone forme = photo nette, zone fond = photo très assombrie
-        ctx.fillStyle = lum < 128 ? "rgba(0,0,0,0.12)" : "rgba(0,0,0,0.72)";
-        ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+        ctx.drawImage(img, x + pad, y + pad, TILE_PX - pad*2, TILE_PX - pad*2);
+        // Forme = photo nette, fond = assombri
+        ctx.fillStyle = lum < 128 ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.75)";
+        ctx.fillRect(x + pad, y + pad, TILE_PX - pad*2, TILE_PX - pad*2);
       };
       img.src = tile.thumb;
     });
@@ -1347,27 +1341,55 @@ function MosaicMode({ photos, goal = 50, shape = "heart" }) {
   const pct = Math.round((filledCount / totalSlots) * 100);
   const remaining = Math.max(0, goal - photos.length);
 
+  // Taille affichée = taille naturelle du canvas * zoom
+  // Le canvas fait COLS*TILE_PX px de large, on le scale via CSS
+  const displayW = COLS * TILE_PX * zoom;
+  const displayH = ROWS * TILE_PX * zoom;
+
   return (
-    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0a0603", overflow: "hidden", position: "relative" }}>
-      <canvas ref={canvasRef} style={{ display: "block", maxWidth: "100%", maxHeight: "88vh", imageRendering: "pixelated" }} />
+    <div style={{ width: "100%", height: "100%", background: "#0a0603", display: "flex", flexDirection: "column", position: "relative" }}>
 
-      {/* Message discret en bas — visible seulement si mosaïque non complète */}
-      {pct < 100 && (
-        <div style={{ position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)", textAlign: "center", pointerEvents: "none" }}>
-          <div style={{ color: "rgba(255,255,255,.22)", fontSize: ".7rem", fontFamily: "'Jost',sans-serif", letterSpacing: 1 }}>
-            {remaining > 0 ? `Encore ${remaining} photo${remaining > 1 ? "s" : ""} pour révéler la mosaïque` : "Mosaïque complète !"}
+      {/* Zone scrollable pour la mosaïque */}
+      <div ref={containerRef} style={{ flex: 1, overflow: "auto", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <canvas
+          ref={canvasRef}
+          style={{
+            display: "block",
+            width: displayW,
+            height: displayH,
+            imageRendering: zoom > 1 ? "pixelated" : "auto",
+            flexShrink: 0,
+          }}
+        />
+        {photos.length === 0 && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.2)", fontFamily: "'Cormorant Garamond',serif", fontSize: "1.2rem", pointerEvents: "none" }}>
+            En attente des premières photos…
           </div>
-          <div style={{ width: 120, height: 2, background: "rgba(255,255,255,.08)", borderRadius: 1, margin: "6px auto 0" }}>
-            <div style={{ height: "100%", width: `${pct}%`, background: "rgba(201,122,106,.5)", borderRadius: 1, transition: "width .8s ease" }} />
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {photos.length === 0 && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.2)", fontFamily: "'Cormorant Garamond',serif", fontSize: "1.2rem", pointerEvents: "none" }}>
-          En attente des premières photos…
-        </div>
-      )}
+      {/* Contrôles zoom — barre fixe en bas */}
+      <div style={{
+        position: "absolute", bottom: 0, left: 0, right: 0,
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
+        padding: "10px 20px",
+        background: "linear-gradient(0deg, rgba(0,0,0,.7) 0%, transparent 100%)",
+      }}>
+        <button onClick={() => setZoom(z => Math.max(0.3, parseFloat((z - 0.25).toFixed(2))))}
+          style={{ background: "rgba(255,255,255,.15)", color: "white", border: "none", borderRadius: "50%", width: 38, height: 38, fontSize: "1.3rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)" }}>−</button>
+        <span style={{ color: "rgba(255,255,255,.6)", fontSize: ".8rem", minWidth: 42, textAlign: "center", fontFamily: "'Jost',sans-serif" }}>{Math.round(zoom * 100)}%</span>
+        <button onClick={() => setZoom(z => Math.min(4, parseFloat((z + 0.25).toFixed(2))))}
+          style={{ background: "rgba(255,255,255,.15)", color: "white", border: "none", borderRadius: "50%", width: 38, height: 38, fontSize: "1.3rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)" }}>+</button>
+        {zoom !== 1 && (
+          <button onClick={() => setZoom(1)}
+            style={{ background: "rgba(201,122,106,.75)", color: "white", border: "none", borderRadius: 50, padding: "6px 14px", fontSize: ".75rem", cursor: "pointer", backdropFilter: "blur(8px)" }}>Reset</button>
+        )}
+        {pct < 100 && (
+          <span style={{ color: "rgba(255,255,255,.25)", fontSize: ".7rem", fontFamily: "'Jost',sans-serif", marginLeft: 8 }}>
+            {remaining > 0 ? `${remaining} photo${remaining > 1 ? "s" : ""} manquante${remaining > 1 ? "s" : ""}` : "✓ Complète"}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
