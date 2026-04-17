@@ -997,6 +997,7 @@ function LiveTV({ setView }) {
       {mode === "wall"      && <WallMode      photos={photos} />}
       {mode === "slideshow" && <SlideshowMode photo={currentSlide} index={slideIdx} speed={speed} total={playlist.length} />}
       {mode === "mixed"     && <MixedMode     photos={photos} />}
+      {mode === "mosaic"    && <MosaicMode    photos={photos} />}
 
       {/* Notification nouvelle photo */}
       {newPhoto && (
@@ -1037,13 +1038,13 @@ function LiveTV({ setView }) {
           </span>
         </div>
         <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-          {["wall","slideshow","mixed"].map(m => (
+          {["wall","slideshow","mixed","mosaic"].map(m => (
             <button key={m} onClick={() => setMode(m)} style={{
               padding: "5px 16px", borderRadius: 50, fontSize: ".8rem", fontFamily: "'Jost',sans-serif",
               background: mode === m ? "rgba(255,255,255,.92)" : "rgba(255,255,255,.13)",
               color: mode === m ? "#1a1008" : "rgba(255,255,255,.8)",
               border: "none", transition: "all .2s", backdropFilter: "blur(10px)",
-            }}>{{ wall: "🧱 Mur", slideshow: "🎞 Diapo", mixed: "⊞ Mixte" }[m]}</button>
+            }}>{{ wall: "🧱 Mur", slideshow: "🎞 Diapo", mixed: "⊞ Mixte", mosaic: "🖼 Mosaïque" }[m]}</button>
           ))}
           {mode === "slideshow" && (
             <select value={speed} onChange={e => setSpeed(+e.target.value)} style={{ background: "rgba(255,255,255,.13)", color: "white", border: "none", borderRadius: 50, padding: "5px 12px", fontSize: ".8rem", backdropFilter: "blur(10px)" }}>
@@ -1165,6 +1166,252 @@ function MixedMode({ photos }) {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MOSAIC MODE — mur de photos qui révèle une image cible
+// ============================================================
+
+// Génère l'image cible (coeur) sur un canvas et retourne les niveaux de gris
+function generateTargetImage(shape, cols, rows) {
+  const offscreen = document.createElement("canvas");
+  offscreen.width = cols;
+  offscreen.height = rows;
+  const ctx = offscreen.getContext("2d");
+
+  ctx.fillStyle = "white";
+  ctx.fillRect(0, 0, cols, rows);
+  ctx.fillStyle = "black";
+
+  if (shape === "heart") {
+    // Coeur mathématique
+    ctx.beginPath();
+    for (let t = 0; t <= Math.PI * 2; t += 0.01) {
+      const x = 16 * Math.pow(Math.sin(t), 3);
+      const y = -(13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
+      const px = (x / 17 + 1) / 2 * cols;
+      const py = (y / 17 + 1) / 2 * rows;
+      if (t === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  } else if (shape === "ring") {
+    // Alliance / cercle
+    const cx = cols / 2, cy = rows / 2;
+    const r1 = Math.min(cols, rows) * 0.42;
+    const r2 = Math.min(cols, rows) * 0.28;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r1, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r2, 0, Math.PI * 2, true);
+    ctx.fill();
+  } else if (shape === "initials") {
+    // Lettres H & Q (ou autre)
+    ctx.font = `bold ${Math.floor(rows * 0.65)}px Georgia, serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("H&Q", cols / 2, rows / 2);
+  } else if (shape === "star") {
+    // Etoile à 5 branches
+    const cx = cols / 2, cy = rows / 2;
+    const outer = Math.min(cols, rows) * 0.45;
+    const inner = outer * 0.42;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? outer : inner;
+      const angle = (i * Math.PI) / 5 - Math.PI / 2;
+      const px = cx + r * Math.cos(angle);
+      const py = cy + r * Math.sin(angle);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Retourne tableau de luminosités (0 = noir, 255 = blanc)
+  const imageData = ctx.getImageData(0, 0, cols, rows);
+  const levels = [];
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const idx = (y * cols + x) * 4;
+      levels.push(imageData.data[idx]); // canal rouge = niveaux de gris
+    }
+  }
+  return { levels, canvas: offscreen };
+}
+
+// Extrait une vignette carrée d'une dataURL
+async function extractThumbnail(dataUrl, size) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = size; c.height = size;
+      const ctx = c.getContext("2d");
+      // Crop centré
+      const side = Math.min(img.width, img.height);
+      const ox = (img.width - side) / 2;
+      const oy = (img.height - side) / 2;
+      ctx.drawImage(img, ox, oy, side, side, 0, 0, size, size);
+      resolve(c.toDataURL("image/jpeg", 0.7));
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
+function MosaicMode({ photos }) {
+  const COLS = 28;
+  const ROWS = 22;
+  const TILE_SIZE = 32; // px affiché
+  const SHAPE = "heart"; // "heart" | "ring" | "initials" | "star"
+
+  const canvasRef = useRef(null);
+  const [filledCount, setFilledCount] = useState(0);
+  const targetRef = useRef(null);
+  const tilesRef = useRef([]); // tableau des tuiles remplies
+  const sortedSlotsRef = useRef([]); // ordre de remplissage (zones sombres en premier)
+  const thumbnailCacheRef = useRef({}); // cache des vignettes
+
+  // Initialise l'image cible et l'ordre de remplissage
+  useEffect(() => {
+    const { levels, canvas } = generateTargetImage(SHAPE, COLS, ROWS);
+    targetRef.current = { levels, canvas };
+
+    // Trie les slots par luminosité croissante (zones noires = sombres remplies en premier)
+    const slots = [];
+    for (let i = 0; i < COLS * ROWS; i++) slots.push(i);
+    slots.sort((a, b) => levels[a] - levels[b]);
+    sortedSlotsRef.current = slots;
+
+    // Init canvas avec image cible en gris clair
+    drawCanvas([]);
+  }, []);
+
+  // Quand les photos changent, remplit les tuiles
+  useEffect(() => {
+    if (!targetRef.current || photos.length === 0) return;
+    fillTiles(photos);
+  }, [photos]);
+
+  const fillTiles = async (photos) => {
+    const slots = sortedSlotsRef.current;
+    const newTiles = [...tilesRef.current];
+    const toFill = Math.min(photos.length, slots.length);
+
+    for (let i = newTiles.length; i < toFill; i++) {
+      const photo = photos[i % photos.length];
+      const cacheKey = photo.id;
+
+      if (!thumbnailCacheRef.current[cacheKey]) {
+        const thumb = await extractThumbnail(photo.url, TILE_SIZE * 2);
+        thumbnailCacheRef.current[cacheKey] = thumb;
+      }
+
+      newTiles.push({
+        slot: slots[i],
+        thumb: thumbnailCacheRef.current[cacheKey],
+      });
+    }
+
+    tilesRef.current = newTiles;
+    setFilledCount(newTiles.length);
+    drawCanvas(newTiles);
+  };
+
+  const drawCanvas = (tiles) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !targetRef.current) return;
+    const ctx = canvas.getContext("2d");
+    const W = COLS * TILE_SIZE;
+    const H = ROWS * TILE_SIZE;
+    canvas.width = W;
+    canvas.height = H;
+
+    // Fond noir
+    ctx.fillStyle = "#0d0805";
+    ctx.fillRect(0, 0, W, H);
+
+    const { levels } = targetRef.current;
+
+    // Dessine les slots vides (image cible en gris sombre)
+    for (let i = 0; i < COLS * ROWS; i++) {
+      const x = (i % COLS) * TILE_SIZE;
+      const y = Math.floor(i / COLS) * TILE_SIZE;
+      const lum = levels[i];
+      // Zone sombre = légèrement visible, zone claire = très sombre
+      const alpha = lum < 128 ? 0.18 : 0.04;
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+      ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+    }
+
+    // Dessine les tuiles remplies
+    const filledSlots = new Set(tiles.map(t => t.slot));
+    tiles.forEach(tile => {
+      if (!tile.thumb) return;
+      const slotIdx = sortedSlotsRef.current.indexOf(tile.slot);
+      const col = tile.slot % COLS;
+      const row = Math.floor(tile.slot / COLS);
+      const x = col * TILE_SIZE;
+      const y = row * TILE_SIZE;
+
+      const img = new Image();
+      img.onload = () => {
+        // Vérifie si la zone est "sombre" dans la cible (coeur) ou "claire" (fond)
+        const lum = levels[tile.slot];
+        if (lum < 128) {
+          // Zone du coeur — photo normale
+          ctx.drawImage(img, x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+          // Légère teinte pour cohérence
+          ctx.fillStyle = "rgba(0,0,0,0.15)";
+          ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+        } else {
+          // Zone fond — photo plus sombre
+          ctx.drawImage(img, x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+          ctx.fillStyle = "rgba(0,0,0,0.65)";
+          ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+        }
+      };
+      img.src = tile.thumb;
+    });
+  };
+
+  const totalSlots = COLS * ROWS;
+  const pct = Math.round((filledCount / totalSlots) * 100);
+
+  return (
+    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0d0805", overflow: "hidden" }}>
+      {/* Canvas mosaïque */}
+      <div style={{ position: "relative", maxWidth: "100%", maxHeight: "85vh" }}>
+        <canvas
+          ref={canvasRef}
+          style={{
+            display: "block",
+            maxWidth: "100%",
+            maxHeight: "85vh",
+            imageRendering: "pixelated",
+          }}
+        />
+        {/* Overlay si vide */}
+        {photos.length === 0 && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.3)", fontFamily: "'Cormorant Garamond',serif", fontSize: "1.2rem" }}>
+            En attente des premières photos…
+          </div>
+        )}
+      </div>
+
+      {/* Barre de progression */}
+      <div style={{ marginTop: 16, textAlign: "center" }}>
+        <div style={{ color: "rgba(255,255,255,.5)", fontSize: ".75rem", fontFamily: "'Jost',sans-serif", marginBottom: 6, letterSpacing: 1 }}>
+          {filledCount} / {totalSlots} tuiles · {pct}%
+        </div>
+        <div style={{ width: 200, height: 3, background: "rgba(255,255,255,.1)", borderRadius: 2 }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: "linear-gradient(90deg, #c97a6a, #b89a6a)", borderRadius: 2, transition: "width .5s ease" }} />
+        </div>
       </div>
     </div>
   );
