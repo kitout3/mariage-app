@@ -320,9 +320,7 @@ function HomePage({ setView }) {
             <span style={{ background: "var(--blush)", borderRadius: 50, padding: "4px 14px", fontSize: ".82rem", color: "var(--burgundy)" }}>
               📸 {photos.length} photo{photos.length > 1 ? "s" : ""}
             </span>
-            <span style={{ background: "#fce8e8", borderRadius: 50, padding: "4px 14px", fontSize: ".82rem", color: "#b03020" }}>
-              ❤️ {photos.reduce((s, p) => s + (p.likes || 0), 0)} réaction{photos.reduce((s, p) => s + (p.likes || 0), 0) > 1 ? "s" : ""}
-            </span>
+
           </div>
         )}
       </div>
@@ -730,24 +728,16 @@ function UploadPage({ setView }) {
 // ============================================================
 function GalleryPage({ setView }) {
   const [photos, setPhotos] = useState([]);
-  const [liked, setLiked] = useState(() => { try { return JSON.parse(localStorage.getItem("wl") || "{}"); } catch { return {}; } });
   const [lightboxId, setLightboxId] = useState(null);
   const [sort, setSort] = useState("recent");
   const [event, setEvent] = useState(DB.getEvent());
   const [zoomedPhoto, setZoomedPhoto] = useState(null);
+  const [zoom, setZoom] = useState(1);
   useEffect(() => DB.onEvent(setEvent), []);
   useEffect(() => DB.onPhotos(all => setPhotos(all.filter(p => p.status === "approved"))), []);
 
   // lightbox toujours synchronisé avec les données temps réel
   const lightbox = lightboxId ? photos.find(p => p.id === lightboxId) || null : null;
-
-  const handleLike = async (photo) => {
-    if (!photo?.id || liked[photo.id]) return;
-    const nl = { ...liked, [photo.id]: true };
-    setLiked(nl);
-    try { localStorage.setItem("wl", JSON.stringify(nl)); } catch {}
-    try { await DB.likePhoto(photo.id); } catch(e) { console.error("Like failed:", e); }
-  };
 
   const sorted = useMemo(() => {
     const arr = [...photos];
@@ -799,16 +789,7 @@ function GalleryPage({ setView }) {
                   ✨ Dernière
                 </span>
                 {latest.author && <p style={{ position: "absolute", bottom: 9, left: 11, color: "white", fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontStyle: "italic" }}>{latest.author}</p>}
-                {/* Bouton like inline */}
-                <button onClick={e => { e.stopPropagation(); handleLike(latest); }} style={{
-                  position: "absolute", bottom: 8, right: 8,
-                  background: liked[latest.id] ? "rgba(220,60,60,.85)" : "rgba(0,0,0,.45)",
-                  color: "white", border: "none", borderRadius: 50, padding: "5px 11px", fontSize: ".75rem",
-                  backdropFilter: "blur(8px)", display: "flex", alignItems: "center", gap: 4,
-                  animation: liked[latest.id] ? "heartPop .4s ease" : "none",
-                }}>
-                  {liked[latest.id] ? "❤️" : "🤍"} {(latest.likes || 0) + (liked[latest.id] ? 1 : 0)}
-                </button>
+
               </div>
             )}
 
@@ -822,15 +803,7 @@ function GalleryPage({ setView }) {
                   ❤️ {topLiked.likes} likes
                 </span>
                 {topLiked.author && <p style={{ position: "absolute", bottom: 9, left: 11, color: "white", fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontStyle: "italic" }}>{topLiked.author}</p>}
-                <button onClick={e => { e.stopPropagation(); handleLike(topLiked); }} style={{
-                  position: "absolute", bottom: 8, right: 8,
-                  background: liked[topLiked.id] ? "rgba(220,60,60,.85)" : "rgba(0,0,0,.45)",
-                  color: "white", border: "none", borderRadius: 50, padding: "5px 11px", fontSize: ".75rem",
-                  backdropFilter: "blur(8px)", display: "flex", alignItems: "center", gap: 4,
-                  animation: liked[topLiked.id] ? "heartPop .4s ease" : "none",
-                }}>
-                  {liked[topLiked.id] ? "❤️" : "🤍"} {(topLiked.likes || 0) + (liked[topLiked.id] ? 1 : 0)}
-                </button>
+
               </div>
             )}
           </div>
@@ -857,7 +830,7 @@ function GalleryPage({ setView }) {
                 border: isTop ? "1.5px solid rgba(200,80,80,.25)" : "none",
                 animationDelay: `${Math.min(i * 0.035, 0.4)}s`,
               }}>
-                <div style={{ position: "relative", cursor: "zoom-in" }} onClick={() => setLightboxId(photo.id)}>
+                <div style={{ position: "relative", cursor: "zoom-in" }} onClick={() => { setLightboxId(photo.id); setZoom(1); }}>
                   <img src={photo.url} alt="" style={{ width: "100%", display: "block" }} loading="lazy" />
                   {isTop && <span style={{ position: "absolute", top: 7, left: 7, background: "rgba(180,40,40,.85)", color: "white", borderRadius: 50, padding: "2px 9px", fontSize: ".66rem" }}>❤️ Top</span>}
                 </div>
@@ -869,16 +842,7 @@ function GalleryPage({ setView }) {
                       <p style={{ fontSize: ".72rem", color: "var(--muted)" }}>{new Date(photo.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p>
                     )}
                   </div>
-                  <button onClick={() => handleLike(photo)} style={{
-                    background: liked[photo.id] ? "#ffe4e4" : "var(--cream)",
-                    border: `1.5px solid ${liked[photo.id] ? "#e74c3c" : "var(--blush)"}`,
-                    borderRadius: 50, padding: "5px 11px", display: "flex", alignItems: "center", gap: 4,
-                    fontSize: ".78rem", color: liked[photo.id] ? "#c0392b" : "var(--muted)",
-                    cursor: liked[photo.id] ? "default" : "pointer", flexShrink: 0,
-                    animation: liked[photo.id] ? "heartPop .4s ease" : "none",
-                  }}>
-                    {liked[photo.id] ? "❤️" : "🤍"} {(photo.likes || 0) + (liked[photo.id] ? 1 : 0)}
-                  </button>
+
                 </div>
               </div>
             );
@@ -889,23 +853,40 @@ function GalleryPage({ setView }) {
       {/* Lightbox — zoom + commentaires + like temps réel */}
       {lightbox && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(10,5,2,.95)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center", animation: "fadeIn .22s ease" }}
-          onClick={() => setLightboxId(null)}>
+          onClick={() => { setLightboxId(null); setZoom(1); }}>
           <button style={{ position: "absolute", top: 16, right: 16, background: "rgba(255,255,255,.15)", color: "white", borderRadius: 50, width: 40, height: 40, fontSize: "1.2rem", backdropFilter: "blur(10px)", zIndex: 2 }}
-            onClick={() => setLightboxId(null)}>✕</button>
+            onClick={() => { setLightboxId(null); setZoom(1); }}>✕</button>
 
-          <div style={{ maxWidth: "92vw", maxHeight: "92vh", display: "flex", flexDirection: "column", alignItems: "center" }} onClick={e => e.stopPropagation()}>
-            {/* Image zoomable au tap */}
-            <div style={{ overflow: zoomedPhoto === lightbox.id ? "auto" : "hidden", maxWidth: "92vw", maxHeight: "70vh", borderRadius: "12px 12px 0 0", cursor: zoomedPhoto === lightbox.id ? "zoom-out" : "zoom-in" }}
-              onClick={() => setZoomedPhoto(z => z === lightbox.id ? null : lightbox.id)}>
+          <div style={{ maxWidth: "96vw", maxHeight: "96vh", display: "flex", flexDirection: "column", alignItems: "center" }} onClick={e => e.stopPropagation()}>
+            {/* Zone image scrollable avec zoom */}
+            <div style={{ overflow: "auto", maxWidth: "96vw", maxHeight: "72vh", borderRadius: "12px 12px 0 0", background: "#0a0603" }}>
               <img src={lightbox.url} alt="" style={{
                 display: "block",
-                maxWidth: zoomedPhoto === lightbox.id ? "none" : "92vw",
-                maxHeight: zoomedPhoto === lightbox.id ? "none" : "70vh",
-                width: zoomedPhoto === lightbox.id ? "180vw" : "auto",
-                objectFit: "contain",
-                borderRadius: zoomedPhoto === lightbox.id ? 0 : "12px 12px 0 0",
-                transition: "all .3s ease",
+                width: `${zoom * 100}%`,
+                maxWidth: zoom === 1 ? "96vw" : "none",
+                objectFit: zoom === 1 ? "contain" : "unset",
+                borderRadius: zoom === 1 ? "12px 12px 0 0" : 0,
+                transition: "width .25s ease",
               }} />
+            </div>
+
+            {/* Contrôles zoom + info */}
+            <div style={{ width: "100%", background: "rgba(15,8,3,.98)", borderRadius: "0 0 12px 12px", padding: "12px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 10 }}>
+                <button onClick={() => setZoom(z => Math.max(1, parseFloat((z - 0.5).toFixed(1))))} style={{ background: "rgba(255,255,255,.15)", color: "white", border: "none", borderRadius: "50%", width: 40, height: 40, fontSize: "1.4rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                <span style={{ color: "rgba(255,255,255,.55)", fontSize: ".82rem", minWidth: 44, textAlign: "center" }}>{Math.round(zoom * 100)}%</span>
+                <button onClick={() => setZoom(z => Math.min(4, parseFloat((z + 0.5).toFixed(1))))} style={{ background: "rgba(255,255,255,.15)", color: "white", border: "none", borderRadius: "50%", width: 40, height: 40, fontSize: "1.4rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                {zoom !== 1 && <button onClick={() => setZoom(1)} style={{ background: "rgba(201,122,106,.75)", color: "white", border: "none", borderRadius: 50, padding: "6px 14px", fontSize: ".75rem", cursor: "pointer" }}>Reset</button>}
+              </div>
+              <div style={{ textAlign: "center" }}>
+                {lightbox.author && <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.1rem", color: "white", marginBottom: 3 }}>— {lightbox.author}</p>}
+                {lightbox.message
+                  ? <p style={{ fontSize: ".85rem", color: "rgba(255,255,255,.6)", fontStyle: "italic" }}>"{lightbox.message}"</p>
+                  : <p style={{ fontSize: ".72rem", color: "rgba(255,255,255,.3)" }}>{new Date(lightbox.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p>
+                }
+              </div>
+            </div>
+          </div>
             </div>
 
             {/* Panneau info + commentaire + like */}
@@ -920,15 +901,7 @@ function GalleryPage({ setView }) {
                   {zoomedPhoto === lightbox.id ? "Appuyez pour dézoomer" : "Appuyez sur la photo pour zoomer"}
                 </p>
               </div>
-              <button onClick={() => handleLike(lightbox)} style={{
-                background: liked[lightbox.id] ? "rgba(210,50,50,.9)" : "rgba(255,255,255,.1)",
-                color: "white", border: "none", borderRadius: 50, padding: "10px 18px",
-                fontSize: "1rem", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", gap: 6,
-                flexShrink: 0, cursor: liked[lightbox.id] ? "default" : "pointer",
-                animation: liked[lightbox.id] ? "heartPop .4s ease" : "none",
-              }}>
-                {liked[lightbox.id] ? "❤️" : "🤍"} {lightbox.likes || 0}
-              </button>
+
             </div>
           </div>
         </div>
@@ -1314,7 +1287,11 @@ function MosaicMode({ photos, goal = 50, shape = "heart" }) {
     const { levels } = generateTargetImage(shape, COLS, ROWS);
     targetRef.current = { levels };
     const slots = Array.from({ length: COLS * ROWS }, (_, i) => i);
-    slots.sort((a, b) => levels[a] - levels[b]);
+    // Ordre aléatoire — Fisher-Yates shuffle
+    for (let i = slots.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [slots[i], slots[j]] = [slots[j], slots[i]];
+    }
     sortedSlotsRef.current = slots;
     tilesRef.current = [];
     setFilledCount(0);
@@ -1329,15 +1306,12 @@ function MosaicMode({ photos, goal = 50, shape = "heart" }) {
 
   const fillTiles = async (photos) => {
     if (photos.length === 0) { drawCanvas([]); return; }
-    const slots = sortedSlotsRef.current;
-    const totalSlots = slots.length;
-    // Nombre de tuiles à remplir = proportion de photos reçues vs goal
-    const progress = Math.min(1, photos.length / Math.max(goal, 1));
-    const toFill = Math.round(progress * totalSlots);
+    const slots = sortedSlotsRef.current; // ordre aléatoire fixé à l'init
+    const toFill = Math.min(photos.length, slots.length); // 1 photo = 1 tuile max
     const newTiles = [];
 
     for (let i = 0; i < toFill; i++) {
-      const photo = photos[i % photos.length];
+      const photo = photos[i]; // chaque photo utilisée une seule fois
       const cacheKey = photo.id;
       if (!thumbnailCacheRef.current[cacheKey]) {
         const thumb = await extractThumbnail(photo.url, TILE_SIZE * 2);
@@ -1672,7 +1646,7 @@ function AdminSettings({ event, onUpdate }) {
               Nombre de photos pour compléter la mosaïque
             </label>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <input type="range" min="10" max="200" step="5" value={mosaicGoal}
+              <input type="range" min="10" max="500" step="5" value={mosaicGoal}
                 onChange={e => setMosaicGoal(+e.target.value)}
                 style={{ flex: 1 }} />
               <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.4rem", color: "var(--burgundy)", minWidth: 40, textAlign: "right" }}>{mosaicGoal}</span>
