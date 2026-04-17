@@ -887,23 +887,6 @@ function GalleryPage({ setView }) {
               </div>
             </div>
           </div>
-            </div>
-
-            {/* Panneau info + commentaire + like */}
-            <div style={{ width: "100%", background: "rgba(15,8,3,.98)", borderRadius: "0 0 12px 12px", padding: "14px 18px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {lightbox.author && <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", color: "white", marginBottom: 4 }}>— {lightbox.author}</p>}
-                {lightbox.message
-                  ? <p style={{ fontSize: ".88rem", color: "rgba(255,255,255,.65)", fontStyle: "italic", lineHeight: 1.4 }}>"{lightbox.message}"</p>
-                  : <p style={{ fontSize: ".75rem", color: "rgba(255,255,255,.3)" }}>{new Date(lightbox.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p>
-                }
-                <p style={{ fontSize: ".68rem", color: "rgba(255,255,255,.2)", marginTop: 6 }}>
-                  {zoomedPhoto === lightbox.id ? "Appuyez pour dézoomer" : "Appuyez sur la photo pour zoomer"}
-                </p>
-              </div>
-
-            </div>
-          </div>
         </div>
       )}
 
