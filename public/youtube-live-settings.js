@@ -1,0 +1,156 @@
+(() => {
+  const DOC_ID = "mariage-live";
+  const PANEL_ID = "wedding-youtube-live-settings";
+
+  const getLang = () => localStorage.getItem("mariage-lang") || "fr";
+  const text = () => {
+    const lang = getLang();
+    if (lang === "en") return {
+      title: "Live streaming",
+      label: "YouTube Live link",
+      help: "Paste the YouTube Live, scheduled stream or video link.",
+      save: "Save live link",
+      saving: "Saving…",
+      saved: "Link saved in Firebase.",
+      invalid: "Invalid YouTube link.",
+      error: "Unable to save the link.",
+      remove: "Remove link"
+    };
+    if (lang === "vi") return {
+      title: "Phát trực tiếp",
+      label: "Liên kết YouTube trực tiếp",
+      help: "Dán liên kết YouTube Live, buổi phát đã lên lịch hoặc video.",
+      save: "Lưu liên kết trực tiếp",
+      saving: "Đang lưu…",
+      saved: "Đã lưu liên kết vào Firebase.",
+      invalid: "Liên kết YouTube không hợp lệ.",
+      error: "Không thể lưu liên kết.",
+      remove: "Xóa liên kết"
+    };
+    return {
+      title: "Diffusion en direct",
+      label: "Lien YouTube du live",
+      help: "Collez le lien YouTube Live, d’une diffusion programmée ou d’une vidéo.",
+      save: "Sauvegarder le lien du live",
+      saving: "Sauvegarde en cours…",
+      saved: "Lien sauvegardé dans Firebase.",
+      invalid: "Lien YouTube invalide.",
+      error: "Impossible de sauvegarder le lien.",
+      remove: "Supprimer le lien"
+    };
+  };
+
+  function parseYouTubeUrl(value) {
+    const raw = value.trim();
+    if (!raw) return { liveUrl: "", playerUrl: "" };
+    let url;
+    try { url = new URL(raw); } catch { return null; }
+    const host = url.hostname.replace(/^www\./, "").toLowerCase();
+    let id = "";
+    if (host === "youtu.be") id = url.pathname.split("/").filter(Boolean)[0] || "";
+    else if (host === "youtube.com" || host === "m.youtube.com") {
+      if (url.pathname === "/watch") id = url.searchParams.get("v") || "";
+      else {
+        const parts = url.pathname.split("/").filter(Boolean);
+        if (["live", "embed", "shorts"].includes(parts[0])) id = parts[1] || "";
+      }
+    }
+    if (!/^[A-Za-z0-9_-]{6,}$/.test(id)) return null;
+    return {
+      liveUrl: `https://www.youtube.com/watch?v=${id}`,
+      playerUrl: `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`
+    };
+  }
+
+  async function readRemote() {
+    const fb = window.__FIREBASE_CONFIG__ || {};
+    if (!fb.projectId || !fb.apiKey) return {};
+    const url = `https://firestore.googleapis.com/v1/projects/${fb.projectId}/databases/(default)/documents/events/${DOC_ID}?key=${encodeURIComponent(fb.apiKey)}`;
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) return {};
+      const json = await response.json();
+      const fields = json.fields || {};
+      return Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, value.stringValue ?? ""]));
+    } catch { return {}; }
+  }
+
+  async function writeRemote(data) {
+    const fb = window.__FIREBASE_CONFIG__ || {};
+    if (!fb.projectId || !fb.apiKey) throw new Error("Firebase configuration missing");
+    const url = `https://firestore.googleapis.com/v1/projects/${fb.projectId}/databases/(default)/documents/events/${DOC_ID}?key=${encodeURIComponent(fb.apiKey)}&updateMask.fieldPaths=liveUrl&updateMask.fieldPaths=playerUrl&updateMask.fieldPaths=eventName&updateMask.fieldPaths=eventDate&updateMask.fieldPaths=eventTime&updateMask.fieldPaths=location`;
+    const event = (() => { try { return JSON.parse(localStorage.getItem("mariage-event-settings") || "{}"); } catch { return {}; } })();
+    const body = {
+      fields: {
+        liveUrl: { stringValue: data.liveUrl || "" },
+        playerUrl: { stringValue: data.playerUrl || "" },
+        eventName: { stringValue: event.name || "Huyen & Quentin" },
+        eventDate: { stringValue: event.date || "13 septembre 2026" },
+        eventTime: { stringValue: "15:30" },
+        location: { stringValue: event.location || "La Faisanderie d’Arcueil" }
+      }
+    };
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!response.ok) throw new Error(await response.text());
+  }
+
+  async function addPanel() {
+    if (document.getElementById(PANEL_ID)) return;
+    const headings = [...document.querySelectorAll("h3")];
+    const tvHeading = headings.find(h => /Affichage TV|TV display|Màn hình trình chiếu/i.test(h.textContent));
+    if (!tvHeading) return;
+    const tvCard = tvHeading.parentElement;
+    const parent = tvCard?.parentElement;
+    if (!tvCard || !parent) return;
+
+    const tr = text();
+    const panel = document.createElement("div");
+    panel.id = PANEL_ID;
+    panel.style.cssText = "background:var(--white,#fffdf9);border-radius:18px;padding:1.5rem;box-shadow:0 2px 10px rgba(92,42,30,.12);display:grid;gap:10px";
+    panel.innerHTML = `
+      <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:var(--burgundy,#5c2a1e);margin:0">🎥 ${tr.title}</h3>
+      <label style="font-size:.75rem;color:var(--muted,#9e7060);display:block">${tr.label}</label>
+      <input data-live-url type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=..." style="width:100%;padding:11px 13px;border-radius:10px;border:1.5px solid var(--blush,#f5ddd4);background:var(--cream,#fdf8f4);font-size:.93rem" />
+      <p style="font-size:.76rem;color:var(--muted,#9e7060);margin:0">${tr.help}</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button data-save-live type="button" style="flex:1;min-width:210px;padding:11px 15px;border-radius:999px;background:linear-gradient(135deg,var(--rose,#c97a6a),var(--burgundy,#5c2a1e));color:#fff;font-weight:500">💾 ${tr.save}</button>
+        <button data-remove-live type="button" style="padding:11px 15px;border-radius:999px;background:var(--blush,#f5ddd4);color:var(--burgundy,#5c2a1e)">${tr.remove}</button>
+      </div>
+      <p data-live-status style="min-height:20px;font-size:.8rem;margin:0"></p>`;
+    tvCard.insertAdjacentElement("afterend", panel);
+
+    const input = panel.querySelector("[data-live-url]");
+    const status = panel.querySelector("[data-live-status]");
+    const save = panel.querySelector("[data-save-live]");
+    const remove = panel.querySelector("[data-remove-live]");
+    const current = await readRemote();
+    input.value = current.liveUrl || "";
+
+    save.onclick = async () => {
+      const parsed = parseYouTubeUrl(input.value);
+      if (!parsed) { status.textContent = tr.invalid; status.style.color = "#b83232"; return; }
+      save.disabled = true; status.textContent = tr.saving; status.style.color = "var(--muted,#9e7060)";
+      try { await writeRemote(parsed); input.value = parsed.liveUrl; status.textContent = tr.saved; status.style.color = "#1e8449"; }
+      catch (error) { console.error(error); status.textContent = tr.error; status.style.color = "#b83232"; }
+      finally { save.disabled = false; }
+    };
+
+    remove.onclick = async () => {
+      remove.disabled = true; status.textContent = tr.saving;
+      try { await writeRemote({ liveUrl: "", playerUrl: "" }); input.value = ""; status.textContent = tr.saved; status.style.color = "#1e8449"; }
+      catch (error) { console.error(error); status.textContent = tr.error; status.style.color = "#b83232"; }
+      finally { remove.disabled = false; }
+    };
+  }
+
+  let timer;
+  const refresh = () => { clearTimeout(timer); timer = setTimeout(addPanel, 40); };
+  new MutationObserver(refresh).observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener("DOMContentLoaded", refresh);
+  window.addEventListener("load", refresh);
+  setTimeout(refresh, 300);
+})();
