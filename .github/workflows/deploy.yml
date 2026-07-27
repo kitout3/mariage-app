@@ -24,6 +24,19 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Prevent Firebase loading lock
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/App.jsx')
+          text = path.read_text(encoding='utf-8')
+          old = 'if (isRealConfig) initFirebase().then(ok => setFbReady(ok));'
+          new = 'if (isRealConfig) Promise.race([initFirebase(), new Promise(resolve => setTimeout(() => resolve(false), 4000))]).finally(() => setFbReady(true));'
+          if old not in text:
+              raise SystemExit('La ligne Firebase attendue est introuvable dans src/App.jsx')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
       - name: Build
         run: npm run build
         env:
