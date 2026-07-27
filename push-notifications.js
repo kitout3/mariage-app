@@ -32,6 +32,8 @@
       if(!vapidKey){status.textContent=t("missing");return;}
       const registration=await navigator.serviceWorker.register("./firebase-messaging-sw.js",{scope:"./"});
       await navigator.serviceWorker.ready;
+      (registration.active||registration.waiting||registration.installing)?.postMessage({type:"FIREBASE_CONFIG",config:cfg});
+      await new Promise(r=>setTimeout(r,250));
       const token=await msg.getToken(messaging,{vapidKey,serviceWorkerRegistration:registration});
       if(!token) throw new Error("token");
       await fs.setDoc(fs.doc(db,COLLECTION,token),{token,eventId:"mariage-2026",enabled:true,platform:navigator.userAgent,updatedAt:fs.serverTimestamp()},{merge:true});
