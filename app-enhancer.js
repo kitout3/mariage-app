@@ -1,7 +1,7 @@
 (() => {
   const translations = {
     fr: {
-      liveTitle: "Regarder le live",
+      liveTitle: "Accéder au live",
       liveDesc: "Suivre la cérémonie en direct",
       upload: "Envoyer une photo",
       uploadDesc: "Partager un souvenir",
@@ -12,11 +12,8 @@
       admin: "Administration",
       adminDesc: "Modérer & exporter",
       copy: "Copier le lien",
-      copied: "Lien copié",
-      photos: "photos",
-      reactions: "réactions",
-      latest: "Dernière",
-      guestQr: "QR Code invités"
+      guestQr: "QR Code invités",
+      latest: "Dernière"
     },
     en: {
       liveTitle: "Watch live",
@@ -30,11 +27,8 @@
       admin: "Administration",
       adminDesc: "Moderate & export",
       copy: "Copy link",
-      copied: "Link copied",
-      photos: "photos",
-      reactions: "reactions",
-      latest: "Latest",
-      guestQr: "Guest QR code"
+      guestQr: "Guest QR code",
+      latest: "Latest"
     },
     vi: {
       liveTitle: "Xem trực tiếp",
@@ -48,145 +42,143 @@
       admin: "Quản trị",
       adminDesc: "Kiểm duyệt và xuất dữ liệu",
       copy: "Sao chép liên kết",
-      copied: "Đã sao chép liên kết",
-      photos: "ảnh",
-      reactions: "cảm xúc",
-      latest: "Mới nhất",
-      guestQr: "Mã QR dành cho khách"
+      guestQr: "Mã QR dành cho khách",
+      latest: "Mới nhất"
     }
   };
 
-  const detectLanguage = () => {
-    const saved = localStorage.getItem("mariage-lang");
-    if (saved && translations[saved]) return saved;
-    const browser = (navigator.language || "en").slice(0, 2).toLowerCase();
-    return translations[browser] ? browser : "en";
-  };
+  const codes = ["fr", "en", "vi"];
+  const saved = localStorage.getItem("mariage-lang");
+  const browser = (navigator.language || "fr").slice(0, 2).toLowerCase();
+  let currentLanguage = translations[saved] ? saved : (translations[browser] ? browser : "fr");
 
-  let currentLanguage = detectLanguage();
-
-  const getBasePath = () => {
+  const basePath = () => {
     const path = window.location.pathname;
     return path.endsWith("/") ? path : path.substring(0, path.lastIndexOf("/") + 1);
   };
 
-  const liveUrl = () => `${window.location.origin}${getBasePath()}live.html`;
+  const liveUrl = () => `${window.location.origin}${basePath()}live.html`;
 
-  const translateText = (root = document.body) => {
+  function translatePage() {
     const t = translations[currentLanguage];
-    const replacements = new Map([
-      ["Envoyer une photo", t.upload],
-      ["Partager un souvenir", t.uploadDesc],
-      ["Galerie & réactions", t.gallery],
-      ["Voir toutes les photos", t.galleryDesc],
-      ["Affichage TV", t.tv],
-      ["Diaporama plein écran", t.tvDesc],
-      ["Administration", t.admin],
-      ["Modérer & exporter", t.adminDesc],
-      ["Copier le lien", t.copy],
-      ["QR Code invités", t.guestQr],
-      ["Dernière", t.latest]
-    ]);
+    const replacements = {
+      "Envoyer une photo": t.upload,
+      "Upload a photo": t.upload,
+      "Gửi ảnh": t.upload,
+      "Partager un souvenir": t.uploadDesc,
+      "Share a memory": t.uploadDesc,
+      "Chia sẻ kỷ niệm": t.uploadDesc,
+      "Galerie & réactions": t.gallery,
+      "Gallery & reactions": t.gallery,
+      "Thư viện & cảm xúc": t.gallery,
+      "Voir toutes les photos": t.galleryDesc,
+      "See all photos": t.galleryDesc,
+      "Xem tất cả ảnh": t.galleryDesc,
+      "Affichage TV": t.tv,
+      "TV display": t.tv,
+      "Màn hình trình chiếu": t.tv,
+      "Diaporama plein écran": t.tvDesc,
+      "Full-screen slideshow": t.tvDesc,
+      "Trình chiếu toàn màn hình": t.tvDesc,
+      "Administration": t.admin,
+      "Quản trị": t.admin,
+      "Modérer & exporter": t.adminDesc,
+      "Moderate & export": t.adminDesc,
+      "Kiểm duyệt và xuất dữ liệu": t.adminDesc,
+      "Copier le lien": t.copy,
+      "Copy link": t.copy,
+      "Sao chép liên kết": t.copy,
+      "QR Code invités": t.guestQr,
+      "Guest QR code": t.guestQr,
+      "Mã QR dành cho khách": t.guestQr,
+      "Dernière": t.latest,
+      "Latest": t.latest,
+      "Mới nhất": t.latest
+    };
 
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
     nodes.forEach(node => {
-      const trimmed = node.nodeValue.trim();
-      if (replacements.has(trimmed)) {
-        node.nodeValue = node.nodeValue.replace(trimmed, replacements.get(trimmed));
-      }
-      if (/^📸\s+\d+\s+photos?$/.test(trimmed)) {
-        node.nodeValue = trimmed.replace(/photos?$/, t.photos);
-      }
-      if (/^❤️\s+\d+\s+réactions?$/.test(trimmed)) {
-        node.nodeValue = trimmed.replace(/réactions?$/, t.reactions);
-      }
+      if (node.parentElement?.closest("#wedding-language-switcher,#wedding-live-access")) return;
+      const value = node.nodeValue.trim();
+      if (replacements[value]) node.nodeValue = node.nodeValue.replace(value, replacements[value]);
     });
-  };
 
-  const makeLanguageSwitcher = () => {
-    if (document.getElementById("wedding-language-switcher")) return;
-    const wrapper = document.createElement("div");
-    wrapper.id = "wedding-language-switcher";
-    Object.assign(wrapper.style, {
-      position: "fixed", top: "14px", right: "14px", zIndex: "10000",
-      display: "flex", gap: "5px", padding: "5px", borderRadius: "999px",
-      background: "rgba(255,253,249,.92)", boxShadow: "0 4px 18px rgba(92,42,30,.18)",
-      backdropFilter: "blur(12px)"
-    });
-    ["fr", "en", "vi"].forEach(code => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = code.toUpperCase();
-      button.setAttribute("aria-label", code);
-      Object.assign(button.style, {
-        border: "0", borderRadius: "999px", padding: "7px 10px", cursor: "pointer",
-        fontFamily: "Jost, sans-serif", fontSize: "12px", fontWeight: "600"
+    document.documentElement.lang = currentLanguage;
+    const title = document.querySelector("#wedding-live-access [data-title]");
+    const desc = document.querySelector("#wedding-live-access [data-desc]");
+    if (title) title.textContent = t.liveTitle;
+    if (desc) desc.textContent = t.liveDesc;
+  }
+
+  function addControls() {
+    if (!document.body) return;
+
+    if (!document.getElementById("wedding-language-switcher")) {
+      const switcher = document.createElement("div");
+      switcher.id = "wedding-language-switcher";
+      switcher.setAttribute("role", "group");
+      switcher.setAttribute("aria-label", "Language");
+      Object.assign(switcher.style, {
+        position: "fixed", top: "12px", right: "12px", zIndex: "2147483647",
+        display: "flex", gap: "4px", padding: "5px", borderRadius: "999px",
+        background: "#fffdf9", border: "1px solid #f5ddd4",
+        boxShadow: "0 5px 24px rgba(92,42,30,.25)"
       });
-      const refresh = () => {
-        const active = currentLanguage === code;
-        button.style.background = active ? "#5c2a1e" : "transparent";
-        button.style.color = active ? "white" : "#5c2a1e";
-      };
-      refresh();
-      button.addEventListener("click", () => {
-        currentLanguage = code;
-        localStorage.setItem("mariage-lang", code);
-        wrapper.querySelectorAll("button").forEach((b, index) => {
-          const selected = ["fr", "en", "vi"][index] === code;
-          b.style.background = selected ? "#5c2a1e" : "transparent";
-          b.style.color = selected ? "white" : "#5c2a1e";
+      codes.forEach(code => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = code.toUpperCase();
+        button.dataset.lang = code;
+        Object.assign(button.style, {
+          border: "0", borderRadius: "999px", padding: "8px 11px", cursor: "pointer",
+          fontFamily: "Arial,sans-serif", fontSize: "12px", fontWeight: "700"
         });
-        translateText();
-        injectLiveCard(true);
+        button.addEventListener("click", () => {
+          currentLanguage = code;
+          localStorage.setItem("mariage-lang", code);
+          updateActiveLanguage();
+          translatePage();
+        });
+        switcher.appendChild(button);
       });
-      wrapper.appendChild(button);
-    });
-    document.body.appendChild(wrapper);
-  };
-
-  const injectLiveCard = (refreshOnly = false) => {
-    const existing = document.getElementById("wedding-live-card");
-    const t = translations[currentLanguage];
-    if (existing) {
-      existing.querySelector("[data-live-title]").textContent = t.liveTitle;
-      existing.querySelector("[data-live-desc]").textContent = t.liveDesc;
-      return;
+      document.body.appendChild(switcher);
     }
-    if (refreshOnly) return;
 
-    const tvText = Array.from(document.querySelectorAll("div")).find(el => el.textContent.trim() === translations.fr.tv || el.textContent.trim() === translations.en.tv || el.textContent.trim() === translations.vi.tv);
-    const grid = tvText?.closest("button")?.parentElement;
-    if (!grid || grid.querySelector("#wedding-live-card")) return;
+    if (!document.getElementById("wedding-live-access")) {
+      const live = document.createElement("button");
+      live.id = "wedding-live-access";
+      live.type = "button";
+      live.innerHTML = '<span style="font-size:22px">🎥</span><span style="display:flex;flex-direction:column;text-align:left"><strong data-title style="font-size:14px"></strong><small data-desc style="font-size:11px;opacity:.85"></small></span>';
+      Object.assign(live.style, {
+        position: "fixed", left: "50%", bottom: "18px", transform: "translateX(-50%)",
+        zIndex: "2147483647", display: "flex", alignItems: "center", gap: "10px",
+        padding: "11px 18px", border: "0", borderRadius: "999px", cursor: "pointer",
+        color: "white", background: "#8f302d", boxShadow: "0 7px 28px rgba(92,42,30,.38)",
+        fontFamily: "Arial,sans-serif", whiteSpace: "nowrap"
+      });
+      live.addEventListener("click", () => { window.location.href = liveUrl(); });
+      document.body.appendChild(live);
+    }
 
-    const card = document.createElement("button");
-    card.id = "wedding-live-card";
-    card.type = "button";
-    card.className = "btn";
-    card.innerHTML = `<div style="font-size:28px;margin-bottom:8px">🎥</div><div data-live-title style="font-family:'Cormorant Garamond',serif;font-size:1.25rem;color:#b34d4d;margin-bottom:2px">${t.liveTitle}</div><div data-live-desc style="color:#9e7060;font-size:.82rem">${t.liveDesc}</div>`;
-    Object.assign(card.style, {
-      background: "#fffdf9", border: "1.5px solid #f5ddd4", borderRadius: "18px",
-      padding: "1.5rem 1.25rem", textAlign: "left", boxShadow: "0 3px 16px rgba(92,42,30,.12)",
-      transition: "all .2s ease"
+    updateActiveLanguage();
+    translatePage();
+  }
+
+  function updateActiveLanguage() {
+    document.querySelectorAll("#wedding-language-switcher button").forEach(button => {
+      const active = button.dataset.lang === currentLanguage;
+      button.style.background = active ? "#5c2a1e" : "transparent";
+      button.style.color = active ? "white" : "#5c2a1e";
     });
-    card.addEventListener("mouseenter", () => { card.style.transform = "translateY(-1px)"; });
-    card.addEventListener("mouseleave", () => { card.style.transform = "translateY(0)"; });
-    card.addEventListener("click", () => { window.location.href = liveUrl(); });
+  }
 
-    const tvButton = tvText.closest("button");
-    grid.insertBefore(card, tvButton);
-  };
-
-  const enhance = () => {
-    makeLanguageSwitcher();
-    translateText();
-    injectLiveCard();
-  };
-
-  const observer = new MutationObserver(() => enhance());
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  document.addEventListener("DOMContentLoaded", enhance);
-  window.addEventListener("load", enhance);
-  setTimeout(enhance, 500);
+  document.addEventListener("DOMContentLoaded", addControls);
+  window.addEventListener("load", addControls);
+  setTimeout(addControls, 50);
+  setTimeout(addControls, 500);
+  setInterval(() => {
+    addControls();
+  }, 1500);
 })();
