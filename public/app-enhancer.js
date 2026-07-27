@@ -1,236 +1,271 @@
 (() => {
+  const EVENT_KEY = "mariage-event-settings";
+  const LANG_KEY = "mariage-lang";
+  const DEFAULT_EVENT = {
+    name: "Huyen & Quentin",
+    date: "13 septembre 2026",
+    location: "La Faisanderie d’Arcueil",
+    coverMessage: "Partagez vos plus beaux souvenirs"
+  };
+
   const translations = {
-    fr: { liveTitle: "Regarder le live", liveDesc: "Suivre la cérémonie en direct", back: "Retour à l’accueil" },
-    en: { liveTitle: "Watch live", liveDesc: "Watch the ceremony live", back: "Back to home" },
-    vi: { liveTitle: "Xem trực tiếp", liveDesc: "Theo dõi lễ cưới trực tiếp", back: "Về trang chủ" }
+    fr: {
+      "Envoyer une photo": "Envoyer une photo", "Partager un souvenir": "Partager un souvenir",
+      "Galerie & réactions": "Galerie & réactions", "Voir toutes les photos": "Voir toutes les photos",
+      "Affichage TV": "Affichage TV", "Diaporama plein écran": "Diaporama plein écran",
+      "Administration": "Administration", "Modérer & exporter": "Modérer et exporter",
+      "Regarder le live": "Regarder le live", "Suivre la cérémonie en direct": "Suivre la cérémonie en direct",
+      "QR Code invités": "QR Code invités", "Copier le lien": "Copier le lien", "Connexion…": "Connexion…",
+      "Retour à l'accueil": "Retour à l’accueil", "Retour à l’accueil": "Retour à l’accueil",
+      "Votre prénom (optionnel)": "Votre prénom (optionnel)", "Un petit mot (optionnel)": "Un petit mot (optionnel)",
+      "Choisir une photo": "Choisir une photo", "Prendre une photo": "Prendre une photo", "Envoyer": "Envoyer",
+      "Annuler": "Annuler", "Réessayer": "Réessayer", "Merci !": "Merci !", "Photo envoyée": "Photo envoyée",
+      "Voir la galerie": "Voir la galerie", "Toutes": "Toutes", "Publiées": "Publiées", "En attente": "En attente",
+      "Refusées": "Refusées", "Aucune photo ici": "Aucune photo ici", "Photo mise à jour": "Photo mise à jour",
+      "Supprimée": "Supprimée", "Photos": "Photos", "Stats": "Statistiques", "Paramètres": "Paramètres",
+      "Export": "Export", "Événement": "Événement", "Nom des mariés": "Nom des mariés", "Date": "Date",
+      "Message d'accueil": "Message d’accueil", "Mot de passe admin": "Mot de passe administrateur",
+      "Modération": "Modération", "Immédiate": "Immédiate", "Photos visibles dès l'envoi": "Photos visibles dès l’envoi",
+      "Modérée": "Modérée", "Validation manuelle": "Validation manuelle", "Différée": "Différée",
+      "Affichage automatique après délai": "Affichage automatique après un délai", "Mur": "Mur", "Diapo": "Diaporama",
+      "Mixte": "Mixte", "Sauvegarder": "Sauvegarder", "Paramètres sauvegardés": "Paramètres sauvegardés",
+      "Mot de passe": "Mot de passe", "Se connecter": "Se connecter", "Mot de passe incorrect": "Mot de passe incorrect",
+      "Déconnexion": "Déconnexion", "Déco.": "Déconnexion", "Accueil": "Accueil", "Total": "Total",
+      "Réactions": "Réactions", "Photos par heure": "Photos par heure", "Aucune donnée": "Aucune donnée",
+      "Photos les plus aimées": "Photos les plus aimées", "Télécharger le CSV": "Télécharger le CSV",
+      "Télécharger les photos": "Télécharger les photos", "Exporter": "Exporter", "Dernière": "Dernière",
+      "Photo la plus aimée": "Photo la plus aimée", "Cérémonie en direct": "Cérémonie en direct",
+      "Le direct n’est pas encore configuré": "Le direct n’est pas encore configuré", "Ouvrir le lecteur": "Ouvrir le lecteur",
+      "Diffusion en direct": "Diffusion en direct", "Lien YouTube du live": "Lien YouTube du live",
+      "Sauvegarder le lien du live": "Sauvegarder le lien du live", "Lien YouTube invalide.": "Lien YouTube invalide.",
+      "Sauvegarde en cours…": "Sauvegarde en cours…", "Lien sauvegardé dans Firebase.": "Lien sauvegardé dans Firebase."
+    },
+    en: {
+      "Envoyer une photo": "Upload a photo", "Partager un souvenir": "Share a memory",
+      "Galerie & réactions": "Gallery & reactions", "Voir toutes les photos": "View all photos",
+      "Affichage TV": "TV display", "Diaporama plein écran": "Full-screen slideshow",
+      "Administration": "Administration", "Modérer & exporter": "Moderate and export", "Modérer et exporter": "Moderate and export",
+      "Regarder le live": "Watch live", "Suivre la cérémonie en direct": "Watch the ceremony live",
+      "QR Code invités": "Guest QR code", "Copier le lien": "Copy link", "Connexion…": "Connecting…",
+      "Retour à l'accueil": "Back to home", "Retour à l’accueil": "Back to home",
+      "Votre prénom (optionnel)": "Your first name (optional)", "Un petit mot (optionnel)": "A short message (optional)",
+      "Choisir une photo": "Choose a photo", "Prendre une photo": "Take a photo", "Envoyer": "Send",
+      "Annuler": "Cancel", "Réessayer": "Try again", "Merci !": "Thank you!", "Photo envoyée": "Photo uploaded",
+      "Voir la galerie": "View gallery", "Toutes": "All", "Publiées": "Published", "En attente": "Pending",
+      "Refusées": "Rejected", "Aucune photo ici": "No photos here", "Photo mise à jour": "Photo updated",
+      "Supprimée": "Deleted", "Photos": "Photos", "Stats": "Statistics", "Statistiques": "Statistics",
+      "Paramètres": "Settings", "Export": "Export", "Événement": "Event", "Nom des mariés": "Couple’s names",
+      "Date": "Date", "Message d'accueil": "Welcome message", "Message d’accueil": "Welcome message",
+      "Mot de passe admin": "Admin password", "Mot de passe administrateur": "Admin password",
+      "Modération": "Moderation", "Immédiate": "Immediate", "Photos visibles dès l'envoi": "Photos visible immediately after upload",
+      "Photos visibles dès l’envoi": "Photos visible immediately after upload", "Modérée": "Moderated",
+      "Validation manuelle": "Manual approval", "Différée": "Delayed",
+      "Affichage automatique après délai": "Automatic display after a delay", "Affichage automatique après un délai": "Automatic display after a delay",
+      "Mur": "Wall", "Diapo": "Slideshow", "Diaporama": "Slideshow", "Mixte": "Mixed", "Sauvegarder": "Save",
+      "Paramètres sauvegardés": "Settings saved", "Mot de passe": "Password", "Se connecter": "Sign in",
+      "Mot de passe incorrect": "Incorrect password", "Déconnexion": "Sign out", "Déco.": "Sign out", "Accueil": "Home",
+      "Total": "Total", "Réactions": "Reactions", "Photos par heure": "Photos by hour", "Aucune donnée": "No data",
+      "Photos les plus aimées": "Most liked photos", "Télécharger le CSV": "Download CSV",
+      "Télécharger les photos": "Download photos", "Exporter": "Export", "Dernière": "Latest",
+      "Photo la plus aimée": "Most liked photo", "Cérémonie en direct": "Live ceremony",
+      "Le direct n’est pas encore configuré": "The live stream is not configured yet", "Ouvrir le lecteur": "Open player",
+      "Diffusion en direct": "Live streaming", "Lien YouTube du live": "YouTube live link",
+      "Sauvegarder le lien du live": "Save live link", "Lien YouTube invalide.": "Invalid YouTube link.",
+      "Sauvegarde en cours…": "Saving…", "Lien sauvegardé dans Firebase.": "Link saved in Firebase."
+    },
+    vi: {
+      "Envoyer une photo": "Gửi ảnh", "Partager un souvenir": "Chia sẻ kỷ niệm",
+      "Galerie & réactions": "Thư viện ảnh và cảm xúc", "Voir toutes les photos": "Xem tất cả ảnh",
+      "Affichage TV": "Màn hình trình chiếu", "Diaporama plein écran": "Trình chiếu toàn màn hình",
+      "Administration": "Quản trị", "Modérer & exporter": "Kiểm duyệt và xuất dữ liệu", "Modérer et exporter": "Kiểm duyệt và xuất dữ liệu",
+      "Regarder le live": "Xem trực tiếp", "Suivre la cérémonie en direct": "Theo dõi lễ cưới trực tiếp",
+      "QR Code invités": "Mã QR dành cho khách", "Copier le lien": "Sao chép liên kết", "Connexion…": "Đang kết nối…",
+      "Retour à l'accueil": "Về trang chủ", "Retour à l’accueil": "Về trang chủ",
+      "Votre prénom (optionnel)": "Tên của bạn (không bắt buộc)", "Un petit mot (optionnel)": "Lời nhắn ngắn (không bắt buộc)",
+      "Choisir une photo": "Chọn ảnh", "Prendre une photo": "Chụp ảnh", "Envoyer": "Gửi", "Annuler": "Hủy",
+      "Réessayer": "Thử lại", "Merci !": "Cảm ơn!", "Photo envoyée": "Ảnh đã được gửi", "Voir la galerie": "Xem thư viện",
+      "Toutes": "Tất cả", "Publiées": "Đã đăng", "En attente": "Đang chờ", "Refusées": "Đã từ chối",
+      "Aucune photo ici": "Chưa có ảnh", "Photo mise à jour": "Ảnh đã được cập nhật", "Supprimée": "Đã xóa",
+      "Photos": "Ảnh", "Stats": "Thống kê", "Statistiques": "Thống kê", "Paramètres": "Cài đặt",
+      "Export": "Xuất dữ liệu", "Événement": "Sự kiện", "Nom des mariés": "Tên cô dâu và chú rể", "Date": "Ngày",
+      "Message d'accueil": "Lời chào", "Message d’accueil": "Lời chào", "Mot de passe admin": "Mật khẩu quản trị",
+      "Mot de passe administrateur": "Mật khẩu quản trị", "Modération": "Kiểm duyệt", "Immédiate": "Ngay lập tức",
+      "Photos visibles dès l'envoi": "Ảnh hiển thị ngay sau khi gửi", "Photos visibles dès l’envoi": "Ảnh hiển thị ngay sau khi gửi",
+      "Modérée": "Có kiểm duyệt", "Validation manuelle": "Duyệt thủ công", "Différée": "Trì hoãn",
+      "Affichage automatique après délai": "Tự động hiển thị sau một khoảng thời gian", "Affichage automatique après un délai": "Tự động hiển thị sau một khoảng thời gian",
+      "Mur": "Tường ảnh", "Diapo": "Trình chiếu", "Diaporama": "Trình chiếu", "Mixte": "Kết hợp",
+      "Sauvegarder": "Lưu", "Paramètres sauvegardés": "Đã lưu cài đặt", "Mot de passe": "Mật khẩu",
+      "Se connecter": "Đăng nhập", "Mot de passe incorrect": "Mật khẩu không đúng", "Déconnexion": "Đăng xuất",
+      "Déco.": "Đăng xuất", "Accueil": "Trang chủ", "Total": "Tổng cộng", "Réactions": "Cảm xúc",
+      "Photos par heure": "Ảnh theo giờ", "Aucune donnée": "Không có dữ liệu", "Photos les plus aimées": "Ảnh được yêu thích nhất",
+      "Télécharger le CSV": "Tải tệp CSV", "Télécharger les photos": "Tải ảnh", "Exporter": "Xuất dữ liệu",
+      "Dernière": "Mới nhất", "Photo la plus aimée": "Ảnh được yêu thích nhất", "Cérémonie en direct": "Lễ cưới trực tiếp",
+      "Le direct n’est pas encore configuré": "Buổi phát trực tiếp chưa được cấu hình", "Ouvrir le lecteur": "Mở trình phát",
+      "Diffusion en direct": "Phát trực tiếp", "Lien YouTube du live": "Liên kết YouTube trực tiếp",
+      "Sauvegarder le lien du live": "Lưu liên kết trực tiếp", "Lien YouTube invalide.": "Liên kết YouTube không hợp lệ.",
+      "Sauvegarde en cours…": "Đang lưu…", "Lien sauvegardé dans Firebase.": "Đã lưu liên kết vào Firebase."
+    }
   };
 
-  const saved = localStorage.getItem("mariage-lang");
-  const browser = (navigator.language || "fr").slice(0, 2).toLowerCase();
-  let currentLanguage = translations[saved] ? saved : (translations[browser] ? browser : "fr");
+  let currentLanguage = localStorage.getItem(LANG_KEY) || ((navigator.language || "fr").slice(0, 2));
+  if (!translations[currentLanguage]) currentLanguage = "fr";
 
-  const basePath = () => {
-    const path = window.location.pathname;
-    return path.endsWith("/") ? path : path.substring(0, path.lastIndexOf("/") + 1);
-  };
-  const liveUrl = () => `${window.location.origin}${basePath()}live.html`;
-
-  const firebase = window.__FIREBASE_CONFIG__ || {};
-  const firestoreDocumentUrl = () => {
-    if (!firebase.projectId || !firebase.apiKey) return null;
-    return `https://firestore.googleapis.com/v1/projects/${firebase.projectId}/databases/(default)/documents/events/mariage-live?key=${encodeURIComponent(firebase.apiKey)}`;
-  };
-
-  const youtubeToEmbed = value => {
-    try {
-      const url = new URL(value.trim());
-      let id = "";
-      if (url.hostname.includes("youtu.be")) id = url.pathname.split("/").filter(Boolean)[0] || "";
-      else if (url.pathname.startsWith("/live/")) id = url.pathname.split("/live/")[1]?.split("/")[0] || "";
-      else if (url.pathname.startsWith("/embed/")) id = url.pathname.split("/embed/")[1]?.split("/")[0] || "";
-      else id = url.searchParams.get("v") || "";
-      return id ? `https://www.youtube.com/embed/${id}` : "";
-    } catch { return ""; }
-  };
-
-  const decodeFirestore = fields => {
-    const out = {};
-    Object.entries(fields || {}).forEach(([key, value]) => {
-      out[key] = value.stringValue ?? value.booleanValue ?? value.integerValue ?? value.doubleValue ?? null;
-    });
-    return out;
-  };
-
-  async function readLiveSettings() {
-    const fallback = JSON.parse(localStorage.getItem("mariage-live-settings") || "null") || {};
-    const endpoint = firestoreDocumentUrl();
-    if (!endpoint) return fallback;
-    try {
-      const response = await fetch(endpoint, { cache: "no-store" });
-      if (!response.ok) return fallback;
-      const json = await response.json();
-      return { ...fallback, ...decodeFirestore(json.fields) };
-    } catch { return fallback; }
+  function readEvent() {
+    try { return { ...DEFAULT_EVENT, ...(JSON.parse(localStorage.getItem(EVENT_KEY) || "{}")) }; }
+    catch { return { ...DEFAULT_EVENT }; }
   }
 
-  async function saveLiveSettings(settings) {
-    localStorage.setItem("mariage-live-settings", JSON.stringify(settings));
-    const endpoint = firestoreDocumentUrl();
-    if (!endpoint) throw new Error("Configuration Firebase absente");
-    const fields = {};
-    Object.entries(settings).forEach(([key, value]) => {
-      fields[key] = { stringValue: String(value ?? "") };
+  function saveEvent(patch) {
+    const next = { ...readEvent(), ...patch };
+    if (!next.name || /Marie\s*&\s*Thomas/i.test(next.name)) next.name = DEFAULT_EVENT.name;
+    if (!next.date || /21\s*Juin\s*2025/i.test(next.date)) next.date = DEFAULT_EVENT.date;
+    localStorage.setItem(EVENT_KEY, JSON.stringify(next));
+    return next;
+  }
+  saveEvent(DEFAULT_EVENT);
+
+  function applyEventIdentity(root = document.body) {
+    if (!root) return;
+    const event = readEvent();
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node => {
+      if (node.parentElement?.closest("#wedding-language-switcher,#wedding-live-panel")) return;
+      let value = node.nodeValue;
+      value = value.replace(/Marie\s*&\s*Thomas/gi, event.name).replace(/Quentin\s*&\s*Huyen/gi, event.name);
+      value = value.replace(/21\s*Juin\s*2025/gi, event.date).replace(/13\s*Septembre\s*2026/gi, event.date);
+      if (value !== node.nodeValue) node.nodeValue = value;
     });
-    const response = await fetch(endpoint, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fields })
-    });
-    if (!response.ok) throw new Error(`Firestore ${response.status}`);
+    document.title = `${event.name} — ${event.date}`;
   }
 
-  function updateLanguage() {
+  function translatePage(root = document.body) {
+    if (!root) return;
+    const dictionary = translations[currentLanguage];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node => {
+      if (node.parentElement?.closest("#wedding-language-switcher,#wedding-live-panel")) return;
+      const clean = node.nodeValue.trim();
+      if (dictionary[clean]) node.nodeValue = node.nodeValue.replace(clean, dictionary[clean]);
+    });
+    const placeholderMap = {
+      fr: { "Mot de passe": "Mot de passe", "Votre prénom": "Votre prénom", "Votre message": "Votre message" },
+      en: { "Mot de passe": "Password", "Votre prénom": "Your first name", "Votre message": "Your message" },
+      vi: { "Mot de passe": "Mật khẩu", "Votre prénom": "Tên của bạn", "Votre message": "Lời nhắn của bạn" }
+    };
+    root.querySelectorAll?.("input,textarea").forEach(input => {
+      const placeholder = input.getAttribute("placeholder");
+      if (!placeholder) return;
+      for (const source of Object.keys(placeholderMap.fr)) {
+        const variants = [placeholderMap.fr[source], placeholderMap.en[source], placeholderMap.vi[source]];
+        if (variants.includes(placeholder)) input.setAttribute("placeholder", placeholderMap[currentLanguage][source]);
+      }
+    });
+    document.documentElement.lang = currentLanguage;
+    updateLanguageButtons();
+  }
+
+  function updateLanguageButtons() {
     document.querySelectorAll("#wedding-language-switcher button").forEach(button => {
       const active = button.dataset.lang === currentLanguage;
       button.style.background = active ? "#5c2a1e" : "transparent";
       button.style.color = active ? "white" : "#5c2a1e";
     });
-    const t = translations[currentLanguage];
-    const title = document.querySelector("#wedding-live-card [data-title]");
-    const desc = document.querySelector("#wedding-live-card [data-desc]");
-    const back = document.querySelector("#wedding-live-panel [data-back]");
-    if (title) title.textContent = t.liveTitle;
-    if (desc) desc.textContent = t.liveDesc;
-    if (back) back.textContent = `← ${t.back}`;
-  }
-
-  function closeLivePanel() {
-    document.getElementById("wedding-live-panel")?.remove();
-    if (window.location.hash === "#stream") history.replaceState(null, "", window.location.pathname + window.location.search);
-  }
-
-  function openLivePanel() {
-    if (document.getElementById("wedding-live-panel")) return;
-    history.replaceState(null, "", `${window.location.pathname}${window.location.search}#stream`);
-    const panel = document.createElement("section");
-    panel.id = "wedding-live-panel";
-    Object.assign(panel.style, {
-      position: "fixed", inset: "0", zIndex: "2147483646", background: "#fdf8f4",
-      display: "flex", flexDirection: "column"
-    });
-    panel.innerHTML = `
-      <header style="height:64px;display:flex;align-items:center;padding:10px 16px;background:#fffdf9;border-bottom:1px solid #f5ddd4;box-shadow:0 2px 12px rgba(92,42,30,.1)">
-        <button data-back type="button" style="border:0;background:#5c2a1e;color:white;border-radius:999px;padding:10px 17px;font:500 14px Arial,sans-serif;cursor:pointer">← Retour à l’accueil</button>
-        <strong style="margin:auto;font:400 22px Georgia,serif;color:#5c2a1e">Huyen & Quentin · Live</strong>
-        <span style="width:145px"></span>
-      </header>
-      <iframe src="${liveUrl()}" title="Cérémonie en direct" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen style="width:100%;flex:1;border:0;background:#1a0d09"></iframe>`;
-    panel.querySelector("[data-back]").onclick = closeLivePanel;
-    document.body.appendChild(panel);
-    updateLanguage();
   }
 
   function addLanguageSwitcher() {
-    if (document.getElementById("wedding-language-switcher")) return;
+    if (!document.body || document.getElementById("wedding-language-switcher")) return;
     const switcher = document.createElement("div");
     switcher.id = "wedding-language-switcher";
-    Object.assign(switcher.style, {
-      position: "fixed", top: "12px", right: "12px", zIndex: "2147483647",
-      display: "flex", gap: "4px", padding: "5px", borderRadius: "999px",
-      background: "#fffdf9", border: "1px solid #f5ddd4", boxShadow: "0 5px 24px rgba(92,42,30,.25)"
-    });
-    ["fr", "en", "vi"].forEach(code => {
+    Object.assign(switcher.style, { position:"fixed", top:"12px", right:"12px", zIndex:"2147483647", display:"flex", gap:"4px", padding:"5px", borderRadius:"999px", background:"#fffdf9", border:"1px solid #f5ddd4", boxShadow:"0 5px 24px rgba(92,42,30,.25)" });
+    ["fr","en","vi"].forEach(code => {
       const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = code.toUpperCase();
-      button.dataset.lang = code;
-      Object.assign(button.style, { border: "0", borderRadius: "999px", padding: "8px 11px", cursor: "pointer", fontWeight: "700" });
-      button.onclick = () => {
-        currentLanguage = code;
-        localStorage.setItem("mariage-lang", code);
-        updateLanguage();
-      };
+      button.type = "button"; button.dataset.lang = code; button.textContent = code.toUpperCase();
+      Object.assign(button.style, { border:"0", borderRadius:"999px", padding:"8px 11px", cursor:"pointer", fontWeight:"700" });
+      button.onclick = () => { currentLanguage = code; localStorage.setItem(LANG_KEY, code); translatePage(); applyEventIdentity(); };
       switcher.appendChild(button);
     });
     document.body.appendChild(switcher);
   }
 
-  function addLiveCard() {
-    if (document.getElementById("wedding-live-card")) return;
-    const adminButton = [...document.querySelectorAll("button")].find(button => button.textContent.includes("Administration"));
-    const grid = adminButton?.parentElement;
-    if (!grid || getComputedStyle(grid).display !== "grid") return;
+  const basePath = () => window.location.pathname.endsWith("/") ? window.location.pathname : window.location.pathname.substring(0, window.location.pathname.lastIndexOf("/") + 1);
 
-    const card = document.createElement("button");
-    card.id = "wedding-live-card";
-    card.type = "button";
-    card.className = "btn";
-    card.innerHTML = '<div style="font-size:28px;margin-bottom:8px">🎥</div><div data-title style="font-family:\'Cormorant Garamond\',serif;font-size:1.25rem;color:#b83232;margin-bottom:2px">Regarder le live</div><div data-desc style="color:#9e7060;font-size:.82rem">Suivre la cérémonie en direct</div>';
-    Object.assign(card.style, {
-      background: "#fffdf9", border: "1.5px solid #f5ddd4", borderRadius: "18px",
-      padding: "1.5rem 1.25rem", textAlign: "left", boxShadow: "0 3px 16px rgba(92,42,30,.12)",
-      cursor: "pointer", animation: "fadeUp .55s .33s ease both"
-    });
-    card.onclick = openLivePanel;
-    grid.insertBefore(card, adminButton);
-    updateLanguage();
+  function closeLivePanel() { document.getElementById("wedding-live-panel")?.remove(); }
+  function openLivePanel() {
+    if (document.getElementById("wedding-live-panel")) return;
+    const event = readEvent();
+    const backText = currentLanguage === "en" ? "Back to home" : currentLanguage === "vi" ? "Về trang chủ" : "Retour à l’accueil";
+    const panel = document.createElement("section");
+    panel.id = "wedding-live-panel";
+    Object.assign(panel.style, { position:"fixed", inset:"0", zIndex:"2147483646", background:"#fdf8f4", display:"flex", flexDirection:"column" });
+    panel.innerHTML = `<header style="height:64px;display:flex;align-items:center;padding:10px 16px;background:#fffdf9;border-bottom:1px solid #f5ddd4"><button data-back type="button" style="border:0;background:#5c2a1e;color:white;border-radius:999px;padding:10px 17px;cursor:pointer">← ${backText}</button><strong style="margin:auto;font:400 22px Georgia,serif;color:#5c2a1e">${event.name} · Live</strong><span style="width:145px"></span></header><iframe src="${window.location.origin}${basePath()}live.html" title="Live" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen style="width:100%;flex:1;border:0;background:#1a0d09"></iframe>`;
+    panel.querySelector("[data-back]").onclick = closeLivePanel;
+    document.body.appendChild(panel);
   }
 
-  async function addAdminLiveEditor() {
-    if (document.getElementById("admin-live-editor")) return;
-    const headings = [...document.querySelectorAll("h3")];
-    const eventHeading = headings.find(h => h.textContent.trim() === "Événement");
-    if (!eventHeading) return;
-    const eventCard = eventHeading.parentElement;
-    if (!eventCard?.parentElement) return;
+  function addLiveCard() {
+    if (document.getElementById("wedding-live-card")) return;
+    const adminButton = [...document.querySelectorAll("button")].find(button => /Administration|Quản trị/.test(button.textContent));
+    const grid = adminButton?.parentElement;
+    if (!grid || getComputedStyle(grid).display !== "grid") return;
+    const card = document.createElement("button");
+    card.id = "wedding-live-card"; card.type = "button"; card.className = "btn";
+    card.innerHTML = '<div style="font-size:28px;margin-bottom:8px">🎥</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.25rem;color:#b83232;margin-bottom:2px">Regarder le live</div><div style="color:#9e7060;font-size:.82rem">Suivre la cérémonie en direct</div>';
+    Object.assign(card.style, { background:"#fffdf9", border:"1.5px solid #f5ddd4", borderRadius:"18px", padding:"1.5rem 1.25rem", textAlign:"left", boxShadow:"0 3px 16px rgba(92,42,30,.12)", cursor:"pointer" });
+    card.onclick = openLivePanel;
+    grid.insertBefore(card, adminButton);
+    translatePage(card);
+  }
 
-    const card = document.createElement("div");
-    card.id = "admin-live-editor";
-    Object.assign(card.style, {
-      background: "#fffdf9", borderRadius: "18px", padding: "1.5rem",
-      boxShadow: "0 2px 10px rgba(92,42,30,.12)", display: "grid", gap: "9px"
-    });
-    card.innerHTML = `
-      <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:#5c2a1e;margin:0 0 5px">🎥 Diffusion en direct</h3>
-      <label for="admin-youtube-url" style="font-size:.75rem;color:#9e7060">Lien YouTube du live</label>
-      <input id="admin-youtube-url" type="url" placeholder="https://youtube.com/live/..." style="width:100%;padding:10px 13px;border-radius:10px;border:1.5px solid #f5ddd4;background:#fdf8f4;font-size:.93rem" />
-      <p style="font-size:.74rem;color:#9e7060;line-height:1.45">Utilise une vidéo ou un direct YouTube en mode <strong>Non répertorié</strong>. Le lien sera sauvegardé dans Firebase et repris automatiquement par le live.</p>
-      <button id="admin-save-youtube" type="button" style="padding:12px;border:0;border-radius:999px;background:linear-gradient(135deg,#c97a6a,#5c2a1e);color:white;font-weight:600;cursor:pointer">💾 Sauvegarder le lien du live</button>
-      <div id="admin-live-status" style="font-size:.78rem;min-height:18px;color:#1e8449"></div>`;
-
-    eventCard.insertAdjacentElement("afterend", card);
-    const input = card.querySelector("#admin-youtube-url");
-    const button = card.querySelector("#admin-save-youtube");
-    const status = card.querySelector("#admin-live-status");
-    const current = await readLiveSettings();
-    input.value = current.liveUrl || "https://youtube.com/live/GOXPaYOleEM?feature=share";
-
-    button.onclick = async () => {
-      const value = input.value.trim();
-      const embed = youtubeToEmbed(value);
-      if (!embed) {
-        status.style.color = "#c0392b";
-        status.textContent = "Lien YouTube invalide.";
-        return;
-      }
-      button.disabled = true;
-      status.style.color = "#9e7060";
-      status.textContent = "Sauvegarde en cours…";
-      try {
-        await saveLiveSettings({
-          liveUrl: value,
-          playerUrl: embed,
-          eventName: "Huyen & Quentin",
-          eventDate: "13 septembre 2026",
-          eventDateISO: "2026-09-13T15:30:00+02:00",
-          eventTime: "15:30",
-          location: "La Faisanderie d’Arcueil",
-          updatedAt: new Date().toISOString()
+  function captureAdminSettings() {
+    [...document.querySelectorAll("button")].filter(button => /Sauvegarder|Save|Lưu/.test(button.textContent)).forEach(button => {
+      if (button.dataset.eventPersistenceBound) return;
+      button.dataset.eventPersistenceBound = "true";
+      button.addEventListener("click", () => {
+        const patch = {};
+        document.querySelectorAll("label").forEach(label => {
+          const input = label.parentElement?.querySelector("input,textarea");
+          if (!input) return;
+          const text = label.textContent.trim();
+          if (/Nom des mariés|Couple’s names|Tên cô dâu và chú rể/.test(text)) patch.name = input.value.trim();
+          if (/^Date$|^Ngày$/.test(text)) patch.date = input.value.trim();
+          if (/Message d'accueil|Message d’accueil|Welcome message|Lời chào/.test(text)) patch.coverMessage = input.value;
         });
-        status.style.color = "#1e8449";
-        status.textContent = "✓ Lien sauvegardé dans Firebase.";
-      } catch (error) {
-        status.style.color = "#c0392b";
-        status.textContent = "Échec Firebase. Vérifie les règles Firestore et les secrets GitHub.";
-        console.error(error);
-      } finally {
-        button.disabled = false;
+        if (Object.keys(patch).length) saveEvent(patch);
+        setTimeout(refresh, 50);
+      }, true);
+    });
+  }
+
+  function correctAdminInputs() {
+    const event = readEvent();
+    document.querySelectorAll("label").forEach(label => {
+      const input = label.parentElement?.querySelector("input");
+      if (!input || document.activeElement === input) return;
+      const text = label.textContent.trim();
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      if (/Nom des mariés|Couple’s names|Tên cô dâu và chú rể/.test(text) && (!input.value || /Marie & Thomas|Quentin & Huyen/.test(input.value))) {
+        setter?.call(input, event.name); input.dispatchEvent(new Event("input", { bubbles:true }));
       }
-    };
+      if (/^Date$|^Ngày$/.test(text) && (!input.value || /21 Juin 2025/i.test(input.value))) {
+        setter?.call(input, event.date); input.dispatchEvent(new Event("input", { bubbles:true }));
+      }
+    });
   }
 
   function refresh() {
     if (!document.body) return;
     document.getElementById("wedding-live-access")?.remove();
-    addLanguageSwitcher();
-    addLiveCard();
-    addAdminLiveEditor();
-    updateLanguage();
-    if (window.location.hash === "#stream") openLivePanel();
+    addLanguageSwitcher(); addLiveCard(); applyEventIdentity(); translatePage(); captureAdminSettings(); correctAdminInputs();
   }
 
-  document.addEventListener("DOMContentLoaded", refresh);
+  let timer;
+  const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(refresh, 40); });
+  document.addEventListener("DOMContentLoaded", () => { refresh(); observer.observe(document.body, { childList:true, subtree:true }); });
   window.addEventListener("load", refresh);
   setTimeout(refresh, 100);
-  setInterval(refresh, 1200);
+  setTimeout(refresh, 800);
 })();
