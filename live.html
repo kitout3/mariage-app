@@ -13,12 +13,12 @@
 <body>
   <main class="wrap">
     <div class="top">
-      <a class="back" href="./" data-i18n="back">← Retour à l’accueil</a>
+      <a class="back" href="/mariage-app/" data-i18n="back">← Retour à l’accueil</a>
       <div class="langs"><button data-lang="fr">FR</button><button data-lang="en">EN</button><button data-lang="vi">VI</button></div>
     </div>
     <section class="hero">
       <div class="ring">💍</div>
-      <h1 id="eventName">Quentin & Huyen</h1>
+      <h1 id="eventName">Huyen & Quentin</h1>
       <div class="meta"><span id="eventDate"></span> · <span id="eventTime"></span><br><span id="location"></span></div>
       <div class="badge"><span class="dot"></span><span data-i18n="live">EN DIRECT</span></div>
       <h2 data-i18n="heading">Cérémonie en direct</h2>
@@ -47,7 +47,7 @@
     function applyLang(){document.documentElement.lang=lang;document.querySelectorAll('[data-i18n]').forEach(el=>el.textContent=i18n[lang][el.dataset.i18n]);document.querySelectorAll('[data-lang]').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));updateCountdown()}
     document.querySelectorAll('[data-lang]').forEach(b=>b.onclick=()=>{lang=b.dataset.lang;localStorage.setItem('mariage-lang',lang);applyLang()});
     function updateCountdown(){const el=document.getElementById('countdown');if(!config.eventDateISO){el.textContent='';return}const target=new Date(config.eventDateISO);const diff=target-Date.now();if(diff<=0){el.textContent=i18n[lang].started;return}const d=Math.floor(diff/86400000),h=Math.floor(diff%86400000/3600000),m=Math.floor(diff%3600000/60000);el.textContent=`${i18n[lang].starts} ${d}j ${h}h ${m}min`;}
-    fetch('./live-config.json',{cache:'no-store'}).then(r=>r.json()).then(c=>{config=c;document.getElementById('eventName').textContent=c.eventName||'Quentin & Huyen';document.getElementById('eventDate').textContent=c.eventDate||'';document.getElementById('eventTime').textContent=c.eventTime||'';document.getElementById('location').textContent=c.location||'';if(c.playerUrl){const iframe=document.createElement('iframe');iframe.src=c.playerUrl;iframe.title=i18n[lang].heading;iframe.allow='autoplay; encrypted-media; picture-in-picture; fullscreen';iframe.allowFullscreen=true;document.getElementById('player').replaceChildren(iframe)}if(c.externalUrl){const a=document.getElementById('externalLink');a.href=c.externalUrl;a.hidden=false}updateCountdown();setInterval(updateCountdown,60000)}).catch(()=>{});
+    fetch('./live-config.json',{cache:'no-store'}).then(r=>r.json()).then(c=>{config=c;document.getElementById('eventName').textContent=c.eventName||'Huyen & Quentin';document.getElementById('eventDate').textContent=c.eventDate||'';document.getElementById('eventTime').textContent=c.eventTime||'';document.getElementById('location').textContent=c.location||'';if(c.playerUrl){const iframe=document.createElement('iframe');iframe.src=c.playerUrl;iframe.title=i18n[lang].heading;iframe.allow='autoplay; encrypted-media; picture-in-picture; fullscreen';iframe.allowFullscreen=true;document.getElementById('player').replaceChildren(iframe)}if(c.externalUrl){const a=document.getElementById('externalLink');a.href=c.externalUrl;a.hidden=false}updateCountdown();setInterval(updateCountdown,60000)}).catch(()=>{});
     applyLang();
   </script>
 </body>
