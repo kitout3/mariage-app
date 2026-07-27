@@ -2,6 +2,7 @@
   const COLLECTION = "pushSubscriptions";
   const LANG_KEY = "mariage-lang";
   const VAPID_KEY = "BF_FutOslaft75leK3ToH9EwsogNxgvPFzNSyUvTOliqs07nnXpEe7rcn6KnycfJhjUjFyhSjjRhok-bwKLb1Ug";
+  const APP_BASE_PATH = "/mariage-app/";
 
   const texts = {
     fr: {
@@ -66,7 +67,8 @@
       const { cfg, db, fs, messaging, msg } = await getFirebase();
       let registration;
       try {
-        registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=20260728-1", { scope: "./" });
+        const workerUrl = `${window.location.origin}${APP_BASE_PATH}firebase-messaging-sw.js?v=20260728-2`;
+        registration = await navigator.serviceWorker.register(workerUrl, { scope: APP_BASE_PATH });
         await registration.update();
         await navigator.serviceWorker.ready;
       } catch (cause) {
