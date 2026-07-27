@@ -1,8 +1,8 @@
 (() => {
   const translations = {
-    fr: { liveTitle: "Accéder au live", liveDesc: "Suivre la cérémonie en direct" },
-    en: { liveTitle: "Watch live", liveDesc: "Watch the ceremony live" },
-    vi: { liveTitle: "Xem trực tiếp", liveDesc: "Theo dõi lễ cưới trực tiếp" }
+    fr: { liveTitle: "Regarder le live", liveDesc: "Suivre la cérémonie en direct", back: "Retour à l’accueil" },
+    en: { liveTitle: "Watch live", liveDesc: "Watch the ceremony live", back: "Back to home" },
+    vi: { liveTitle: "Xem trực tiếp", liveDesc: "Theo dõi lễ cưới trực tiếp", back: "Về trang chủ" }
   };
 
   const saved = localStorage.getItem("mariage-lang");
@@ -69,60 +69,91 @@
     if (!response.ok) throw new Error(`Firestore ${response.status}`);
   }
 
-  function updateActiveLanguage() {
+  function updateLanguage() {
     document.querySelectorAll("#wedding-language-switcher button").forEach(button => {
       const active = button.dataset.lang === currentLanguage;
       button.style.background = active ? "#5c2a1e" : "transparent";
       button.style.color = active ? "white" : "#5c2a1e";
     });
     const t = translations[currentLanguage];
-    const title = document.querySelector("#wedding-live-access [data-title]");
-    const desc = document.querySelector("#wedding-live-access [data-desc]");
+    const title = document.querySelector("#wedding-live-card [data-title]");
+    const desc = document.querySelector("#wedding-live-card [data-desc]");
+    const back = document.querySelector("#wedding-live-panel [data-back]");
     if (title) title.textContent = t.liveTitle;
     if (desc) desc.textContent = t.liveDesc;
+    if (back) back.textContent = `← ${t.back}`;
   }
 
-  function addGlobalControls() {
-    if (!document.body) return;
-    if (!document.getElementById("wedding-language-switcher")) {
-      const switcher = document.createElement("div");
-      switcher.id = "wedding-language-switcher";
-      Object.assign(switcher.style, {
-        position: "fixed", top: "12px", right: "12px", zIndex: "2147483647",
-        display: "flex", gap: "4px", padding: "5px", borderRadius: "999px",
-        background: "#fffdf9", border: "1px solid #f5ddd4", boxShadow: "0 5px 24px rgba(92,42,30,.25)"
-      });
-      ["fr", "en", "vi"].forEach(code => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = code.toUpperCase();
-        button.dataset.lang = code;
-        Object.assign(button.style, { border: "0", borderRadius: "999px", padding: "8px 11px", cursor: "pointer", fontWeight: "700" });
-        button.onclick = () => {
-          currentLanguage = code;
-          localStorage.setItem("mariage-lang", code);
-          updateActiveLanguage();
-        };
-        switcher.appendChild(button);
-      });
-      document.body.appendChild(switcher);
-    }
+  function closeLivePanel() {
+    document.getElementById("wedding-live-panel")?.remove();
+    if (window.location.hash === "#stream") history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
 
-    if (!document.getElementById("wedding-live-access")) {
-      const live = document.createElement("button");
-      live.id = "wedding-live-access";
-      live.type = "button";
-      live.innerHTML = '<span style="font-size:22px">🎥</span><span style="display:flex;flex-direction:column;text-align:left"><strong data-title style="font-size:14px"></strong><small data-desc style="font-size:11px;opacity:.85"></small></span>';
-      Object.assign(live.style, {
-        position: "fixed", left: "50%", bottom: "18px", transform: "translateX(-50%)",
-        zIndex: "2147483647", display: "flex", alignItems: "center", gap: "10px",
-        padding: "11px 18px", border: "0", borderRadius: "999px", cursor: "pointer",
-        color: "white", background: "#8f302d", boxShadow: "0 7px 28px rgba(92,42,30,.38)", whiteSpace: "nowrap"
-      });
-      live.onclick = () => { window.location.href = liveUrl(); };
-      document.body.appendChild(live);
-    }
-    updateActiveLanguage();
+  function openLivePanel() {
+    if (document.getElementById("wedding-live-panel")) return;
+    history.replaceState(null, "", `${window.location.pathname}${window.location.search}#stream`);
+    const panel = document.createElement("section");
+    panel.id = "wedding-live-panel";
+    Object.assign(panel.style, {
+      position: "fixed", inset: "0", zIndex: "2147483646", background: "#fdf8f4",
+      display: "flex", flexDirection: "column"
+    });
+    panel.innerHTML = `
+      <header style="height:64px;display:flex;align-items:center;padding:10px 16px;background:#fffdf9;border-bottom:1px solid #f5ddd4;box-shadow:0 2px 12px rgba(92,42,30,.1)">
+        <button data-back type="button" style="border:0;background:#5c2a1e;color:white;border-radius:999px;padding:10px 17px;font:500 14px Arial,sans-serif;cursor:pointer">← Retour à l’accueil</button>
+        <strong style="margin:auto;font:400 22px Georgia,serif;color:#5c2a1e">Huyen & Quentin · Live</strong>
+        <span style="width:145px"></span>
+      </header>
+      <iframe src="${liveUrl()}" title="Cérémonie en direct" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen style="width:100%;flex:1;border:0;background:#1a0d09"></iframe>`;
+    panel.querySelector("[data-back]").onclick = closeLivePanel;
+    document.body.appendChild(panel);
+    updateLanguage();
+  }
+
+  function addLanguageSwitcher() {
+    if (document.getElementById("wedding-language-switcher")) return;
+    const switcher = document.createElement("div");
+    switcher.id = "wedding-language-switcher";
+    Object.assign(switcher.style, {
+      position: "fixed", top: "12px", right: "12px", zIndex: "2147483647",
+      display: "flex", gap: "4px", padding: "5px", borderRadius: "999px",
+      background: "#fffdf9", border: "1px solid #f5ddd4", boxShadow: "0 5px 24px rgba(92,42,30,.25)"
+    });
+    ["fr", "en", "vi"].forEach(code => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = code.toUpperCase();
+      button.dataset.lang = code;
+      Object.assign(button.style, { border: "0", borderRadius: "999px", padding: "8px 11px", cursor: "pointer", fontWeight: "700" });
+      button.onclick = () => {
+        currentLanguage = code;
+        localStorage.setItem("mariage-lang", code);
+        updateLanguage();
+      };
+      switcher.appendChild(button);
+    });
+    document.body.appendChild(switcher);
+  }
+
+  function addLiveCard() {
+    if (document.getElementById("wedding-live-card")) return;
+    const adminButton = [...document.querySelectorAll("button")].find(button => button.textContent.includes("Administration"));
+    const grid = adminButton?.parentElement;
+    if (!grid || getComputedStyle(grid).display !== "grid") return;
+
+    const card = document.createElement("button");
+    card.id = "wedding-live-card";
+    card.type = "button";
+    card.className = "btn";
+    card.innerHTML = '<div style="font-size:28px;margin-bottom:8px">🎥</div><div data-title style="font-family:\'Cormorant Garamond\',serif;font-size:1.25rem;color:#b83232;margin-bottom:2px">Regarder le live</div><div data-desc style="color:#9e7060;font-size:.82rem">Suivre la cérémonie en direct</div>';
+    Object.assign(card.style, {
+      background: "#fffdf9", border: "1.5px solid #f5ddd4", borderRadius: "18px",
+      padding: "1.5rem 1.25rem", textAlign: "left", boxShadow: "0 3px 16px rgba(92,42,30,.12)",
+      cursor: "pointer", animation: "fadeUp .55s .33s ease both"
+    });
+    card.onclick = openLivePanel;
+    grid.insertBefore(card, adminButton);
+    updateLanguage();
   }
 
   async function addAdminLiveEditor() {
@@ -143,7 +174,7 @@
       <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:#5c2a1e;margin:0 0 5px">🎥 Diffusion en direct</h3>
       <label for="admin-youtube-url" style="font-size:.75rem;color:#9e7060">Lien YouTube du live</label>
       <input id="admin-youtube-url" type="url" placeholder="https://youtube.com/live/..." style="width:100%;padding:10px 13px;border-radius:10px;border:1.5px solid #f5ddd4;background:#fdf8f4;font-size:.93rem" />
-      <p style="font-size:.74rem;color:#9e7060;line-height:1.45">Utilise une vidéo ou un direct YouTube en mode <strong>Non répertorié</strong>. Le lien sera sauvegardé dans Firebase et repris automatiquement par la page Live.</p>
+      <p style="font-size:.74rem;color:#9e7060;line-height:1.45">Utilise une vidéo ou un direct YouTube en mode <strong>Non répertorié</strong>. Le lien sera sauvegardé dans Firebase et repris automatiquement par le live.</p>
       <button id="admin-save-youtube" type="button" style="padding:12px;border:0;border-radius:999px;background:linear-gradient(135deg,#c97a6a,#5c2a1e);color:white;font-weight:600;cursor:pointer">💾 Sauvegarder le lien du live</button>
       <div id="admin-live-status" style="font-size:.78rem;min-height:18px;color:#1e8449"></div>`;
 
@@ -188,10 +219,16 @@
     };
   }
 
-  const refresh = () => {
-    addGlobalControls();
+  function refresh() {
+    if (!document.body) return;
+    document.getElementById("wedding-live-access")?.remove();
+    addLanguageSwitcher();
+    addLiveCard();
     addAdminLiveEditor();
-  };
+    updateLanguage();
+    if (window.location.hash === "#stream") openLivePanel();
+  }
+
   document.addEventListener("DOMContentLoaded", refresh);
   window.addEventListener("load", refresh);
   setTimeout(refresh, 100);
