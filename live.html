@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#5c2a1e" />
+  <title>Cérémonie en direct</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Jost:wght@300;400;500&display=swap');
+    *{box-sizing:border-box} body{margin:0;min-height:100vh;background:linear-gradient(150deg,#1a0d09 0%,#5c2a1e 55%,#24100b 100%);color:#fff;font-family:Jost,sans-serif;padding:20px}.wrap{max-width:1050px;margin:auto}.top{display:flex;justify-content:space-between;align-items:center;gap:12px}.back,.langs button,.open{border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.12);color:#fff;border-radius:999px;padding:9px 14px;text-decoration:none;cursor:pointer}.langs{display:flex;gap:5px;padding:5px;border-radius:999px;background:rgba(255,255,255,.1)}.langs button{border:0;padding:7px 10px;background:transparent}.langs button.active{background:#fff;color:#2b120c}.hero{text-align:center;padding:28px 0 18px}.ring{font-size:42px}.hero h1{font:300 clamp(2.5rem,8vw,4.8rem) 'Cormorant Garamond',serif;margin:2px 0}.meta{opacity:.72;letter-spacing:1.4px}.badge{display:inline-flex;align-items:center;gap:8px;margin-top:16px;background:#b83232;padding:7px 15px;border-radius:999px;font-size:.82rem}.dot{width:8px;height:8px;background:#fff;border-radius:50%;animation:pulse 1.2s infinite}@keyframes pulse{50%{opacity:.35}}.player{width:100%;aspect-ratio:16/9;border-radius:22px;overflow:hidden;background:#080403;box-shadow:0 18px 55px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center}.player iframe{width:100%;height:100%;border:0}.empty{text-align:center;padding:32px;max-width:560px}.empty .icon{font-size:60px}.empty h2{font:300 2rem 'Cormorant Garamond',serif;margin:10px 0}.empty p{opacity:.72;line-height:1.6}.footer{text-align:center;padding:18px 0 6px;opacity:.72;font-size:.9rem}.open{display:inline-block;margin-top:12px}.countdown{font-size:.9rem;opacity:.8;margin-top:8px}@media(max-width:600px){body{padding:12px}.back{font-size:0}.back:before{content:'←';font-size:18px}.player{border-radius:14px}.hero{padding-top:20px}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="top">
+      <a class="back" href="./" data-i18n="back">← Retour à l’accueil</a>
+      <div class="langs"><button data-lang="fr">FR</button><button data-lang="en">EN</button><button data-lang="vi">VI</button></div>
+    </div>
+    <section class="hero">
+      <div class="ring">💍</div>
+      <h1 id="eventName">Quentin & Huyen</h1>
+      <div class="meta"><span id="eventDate"></span> · <span id="eventTime"></span><br><span id="location"></span></div>
+      <div class="badge"><span class="dot"></span><span data-i18n="live">EN DIRECT</span></div>
+      <h2 data-i18n="heading">Cérémonie en direct</h2>
+      <div class="countdown" id="countdown"></div>
+    </section>
+    <section class="player" id="player">
+      <div class="empty" id="emptyState">
+        <div class="icon">🎥</div>
+        <h2 data-i18n="notConfigured">Le direct n’est pas encore configuré</h2>
+        <p data-i18n="help">Le lecteur privé apparaîtra ici dès que son adresse aura été ajoutée dans live-config.json.</p>
+      </div>
+    </section>
+    <div class="footer">
+      <div data-i18n="sound">Touchez la vidéo pour activer le son.</div>
+      <a class="open" id="externalLink" href="#" target="_blank" rel="noreferrer" hidden data-i18n="open">Ouvrir le lecteur</a>
+    </div>
+  </main>
+  <script>
+    const i18n={
+      fr:{back:'← Retour à l’accueil',live:'EN DIRECT',heading:'Cérémonie en direct',notConfigured:'Le direct n’est pas encore configuré',help:'Le lecteur privé apparaîtra ici dès que son adresse aura été ajoutée dans live-config.json.',sound:'Touchez la vidéo pour activer le son.',open:'Ouvrir le lecteur',starts:'Le direct commence dans',started:'Le direct peut commencer.'},
+      en:{back:'← Back to home',live:'LIVE',heading:'Live ceremony',notConfigured:'The live stream is not configured yet',help:'The private player will appear here once its address has been added to live-config.json.',sound:'Tap the video to enable sound.',open:'Open player',starts:'The live starts in',started:'The live stream can start.'},
+      vi:{back:'← Về trang chủ',live:'TRỰC TIẾP',heading:'Lễ cưới trực tiếp',notConfigured:'Buổi phát trực tiếp chưa được cấu hình',help:'Trình phát riêng sẽ xuất hiện tại đây sau khi địa chỉ được thêm vào live-config.json.',sound:'Chạm vào video để bật âm thanh.',open:'Mở trình phát',starts:'Buổi phát trực tiếp bắt đầu sau',started:'Buổi phát trực tiếp có thể bắt đầu.'}
+    };
+    let lang=localStorage.getItem('mariage-lang')||((navigator.language||'en').slice(0,2));if(!i18n[lang])lang='en';
+    let config={};
+    function applyLang(){document.documentElement.lang=lang;document.querySelectorAll('[data-i18n]').forEach(el=>el.textContent=i18n[lang][el.dataset.i18n]);document.querySelectorAll('[data-lang]').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));updateCountdown()}
+    document.querySelectorAll('[data-lang]').forEach(b=>b.onclick=()=>{lang=b.dataset.lang;localStorage.setItem('mariage-lang',lang);applyLang()});
+    function updateCountdown(){const el=document.getElementById('countdown');if(!config.eventDateISO){el.textContent='';return}const target=new Date(config.eventDateISO);const diff=target-Date.now();if(diff<=0){el.textContent=i18n[lang].started;return}const d=Math.floor(diff/86400000),h=Math.floor(diff%86400000/3600000),m=Math.floor(diff%3600000/60000);el.textContent=`${i18n[lang].starts} ${d}j ${h}h ${m}min`;}
+    fetch('./live-config.json',{cache:'no-store'}).then(r=>r.json()).then(c=>{config=c;document.getElementById('eventName').textContent=c.eventName||'Quentin & Huyen';document.getElementById('eventDate').textContent=c.eventDate||'';document.getElementById('eventTime').textContent=c.eventTime||'';document.getElementById('location').textContent=c.location||'';if(c.playerUrl){const iframe=document.createElement('iframe');iframe.src=c.playerUrl;iframe.title=i18n[lang].heading;iframe.allow='autoplay; encrypted-media; picture-in-picture; fullscreen';iframe.allowFullscreen=true;document.getElementById('player').replaceChildren(iframe)}if(c.externalUrl){const a=document.getElementById('externalLink');a.href=c.externalUrl;a.hidden=false}updateCountdown();setInterval(updateCountdown,60000)}).catch(()=>{});
+    applyLang();
+  </script>
+</body>
+</html>
