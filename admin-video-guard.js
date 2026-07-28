@@ -5,7 +5,7 @@
     );
 
   const protectVideoModeration = () => {
-    const authenticated = location.hash === "#admin" && isAdminAuthenticated();
+    const authenticated = isAdminAuthenticated();
 
     document.querySelectorAll(".vt-admin").forEach(panel => {
       panel.style.display = authenticated ? "block" : "none";
@@ -13,11 +13,21 @@
     });
   };
 
-  const observer = new MutationObserver(protectVideoModeration);
+  const observer = new MutationObserver(() => {
+    window.requestAnimationFrame(protectVideoModeration);
+  });
 
   document.addEventListener("DOMContentLoaded", () => {
     protectVideoModeration();
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+  });
+
+  document.addEventListener("click", () => {
+    setTimeout(protectVideoModeration, 50);
   });
 
   window.addEventListener("hashchange", protectVideoModeration);
