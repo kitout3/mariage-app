@@ -1,13 +1,12 @@
 (() => {
+  const CHAT_ID = "wedding-live-chat";
   const EVENT_ID = "mariage-2026";
   const COLLECTION = "liveChatMessages";
+  let mountedHost = null;
+  let unsubscribe = null;
 
   const escapeHtml = value => String(value || "").replace(/[&<>"']/g, char => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;"
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
   }[char]));
 
   function getLang() {
@@ -20,7 +19,6 @@
     en: { title: "Live chat", name: "Your name", message: "Write a message…", send: "Send", empty: "Be the first to write a message.", error: "The chat could not be loaded.", sending: "Sending…" },
     vi: { title: "Trò chuyện trực tiếp", name: "Tên của bạn", message: "Viết tin nhắn…", send: "Gửi", empty: "Hãy là người đầu tiên gửi tin nhắn.", error: "Không thể tải trò chuyện.", sending: "Đang gửi…" }
   };
-
   const t = key => texts[getLang()][key];
 
   function formatTime(timestamp) {
@@ -29,28 +27,45 @@
     return date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
   }
 
-  async function init() {
-    const host = document.getElementById("liveChat");
-    if (!host) return;
+  function findOrCreateHost() {
+    const panel = document.getElementById("wedding-live-panel");
+    if (panel) {
+      let host = panel.querySelector(`#${CHAT_ID}`);
+      if (!host) {
+        host = document.createElement("section");
+        host.id = CHAT_ID;
+        host.style.cssText = "height:min(40vh,360px);min-height:245px;background:#fffdf9;border-top:1px solid #f5ddd4;padding:12px 14px;display:grid;grid-template-rows:auto minmax(100px,1fr) auto;gap:9px;box-sizing:border-box;color:#3d2010";
+        panel.appendChild(host);
+      }
+      return host;
+    }
+    return document.getElementById("liveChat");
+  }
+
+  async function mount(host) {
+    if (!host || host === mountedHost) return;
+    unsubscribe?.();
+    unsubscribe = null;
+    mountedHost = host;
 
     host.innerHTML = `
-      <div class="chat-head">
-        <h2>💬 ${t("title")}</h2>
-        <span id="chatCount"></span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <h2 style="margin:0;font:600 1.25rem 'Cormorant Garamond',Georgia,serif;color:#5c2a1e">💬 ${t("title")}</h2>
+        <span data-chat-count style="font-size:.75rem;color:#9e7060"></span>
       </div>
-      <div id="chatList" class="chat-list"><p class="chat-empty">${t("empty")}</p></div>
-      <form id="chatForm" class="chat-form">
-        <input id="chatName" maxlength="30" placeholder="${t("name")}" autocomplete="name" />
-        <input id="chatMessage" maxlength="300" placeholder="${t("message")}" required autocomplete="off" />
-        <button id="chatSend" type="submit">${t("send")}</button>
+      <div data-chat-list style="overflow:auto;display:grid;align-content:start;gap:8px;padding:2px 2px 4px"><p style="margin:auto;color:#9e7060">${t("empty")}</p></div>
+      <form data-chat-form style="display:grid;grid-template-columns:minmax(90px,130px) 1fr auto;gap:7px;align-items:center">
+        <input data-chat-name maxlength="30" placeholder="${t("name")}" autocomplete="name" style="min-width:0;padding:10px 11px;border:1px solid #f5ddd4;border-radius:12px;background:#fdf8f4;font:inherit" />
+        <input data-chat-message maxlength="300" placeholder="${t("message")}" required autocomplete="off" style="min-width:0;padding:10px 11px;border:1px solid #f5ddd4;border-radius:12px;background:#fdf8f4;font:inherit" />
+        <button data-chat-send type="submit" style="border:0;border-radius:999px;padding:10px 15px;background:#5c2a1e;color:white;font-weight:600;cursor:pointer">${t("send")}</button>
       </form>`;
 
-    const list = document.getElementById("chatList");
-    const count = document.getElementById("chatCount");
-    const form = document.getElementById("chatForm");
-    const nameInput = document.getElementById("chatName");
-    const messageInput = document.getElementById("chatMessage");
-    const sendButton = document.getElementById("chatSend");
+    const list = host.querySelector("[data-chat-list]");
+    const count = host.querySelector("[data-chat-count]");
+    const form = host.querySelector("[data-chat-form]");
+    const nameInput = host.querySelector("[data-chat-name]");
+    const messageInput = host.querySelector("[data-chat-message]");
+    const sendButton = host.querySelector("[data-chat-send]");
     nameInput.value = localStorage.getItem("wedding-chat-name") || "";
 
     try {
@@ -58,48 +73,30 @@
         import("https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"),
         import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js")
       ]);
-
       const config = window.__FIREBASE_CONFIG__ || {};
       if (!config.apiKey || !config.projectId) throw new Error("Firebase configuration missing");
-
       const app = getApps()[0] || initializeApp(config);
       const db = fs.getFirestore(app);
-      const query = fs.query(
-        fs.collection(db, COLLECTION),
-        fs.orderBy("createdAt", "asc"),
-        fs.limit(300)
-      );
+      const query = fs.query(fs.collection(db, COLLECTION), fs.orderBy("createdAt", "asc"), fs.limit(300));
 
-      fs.onSnapshot(query, snapshot => {
-        const messages = snapshot.docs
-          .map(documentSnapshot => documentSnapshot.data())
-          .filter(item => item.eventId === EVENT_ID)
-          .slice(-150);
-
+      unsubscribe = fs.onSnapshot(query, snapshot => {
+        const messages = snapshot.docs.map(doc => doc.data()).filter(item => item.eventId === EVENT_ID).slice(-150);
         count.textContent = messages.length ? String(messages.length) : "";
         list.innerHTML = "";
-
         if (!messages.length) {
-          list.innerHTML = `<p class="chat-empty">${t("empty")}</p>`;
+          list.innerHTML = `<p style="margin:auto;color:#9e7060">${t("empty")}</p>`;
           return;
         }
-
         messages.forEach(item => {
           const row = document.createElement("article");
-          row.className = "chat-message";
-          row.innerHTML = `
-            <div class="chat-message-head">
-              <strong>${escapeHtml(item.name || "Invité")}</strong>
-              <time>${formatTime(item.createdAt)}</time>
-            </div>
-            <p>${escapeHtml(item.message)}</p>`;
+          row.style.cssText = "background:#fdf8f4;border:1px solid #f5ddd4;border-radius:12px;padding:8px 10px";
+          row.innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px"><strong style="color:#5c2a1e;font-size:.88rem">${escapeHtml(item.name || "Invité")}</strong><time style="color:#9e7060;font-size:.7rem">${formatTime(item.createdAt)}</time></div><p style="margin:3px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.88rem">${escapeHtml(item.message)}</p>`;
           list.appendChild(row);
         });
-
         list.scrollTop = list.scrollHeight;
       }, error => {
         console.error("Live chat:", error);
-        list.innerHTML = `<p class="chat-error">${t("error")}</p>`;
+        list.innerHTML = `<p style="margin:auto;color:#b83232">${t("error")}</p>`;
       });
 
       form.addEventListener("submit", async event => {
@@ -107,18 +104,11 @@
         const name = nameInput.value.trim().slice(0, 30) || "Invité";
         const message = messageInput.value.trim().slice(0, 300);
         if (!message) return;
-
         sendButton.disabled = true;
         sendButton.textContent = t("sending");
-
         try {
           localStorage.setItem("wedding-chat-name", name === "Invité" ? "" : name);
-          await fs.addDoc(fs.collection(db, COLLECTION), {
-            eventId: EVENT_ID,
-            name,
-            message,
-            createdAt: fs.serverTimestamp()
-          });
+          await fs.addDoc(fs.collection(db, COLLECTION), { eventId: EVENT_ID, name, message, createdAt: fs.serverTimestamp() });
           messageInput.value = "";
         } catch (error) {
           console.error("Send chat message:", error);
@@ -131,9 +121,24 @@
       });
     } catch (error) {
       console.error("Live chat init:", error);
-      list.innerHTML = `<p class="chat-error">${t("error")}</p>`;
+      list.innerHTML = `<p style="margin:auto;color:#b83232">${t("error")}</p>`;
     }
   }
 
-  document.addEventListener("DOMContentLoaded", init);
+  function scan() {
+    const host = findOrCreateHost();
+    if (host) mount(host);
+    else if (mountedHost && !document.body.contains(mountedHost)) {
+      unsubscribe?.();
+      unsubscribe = null;
+      mountedHost = null;
+    }
+  }
+
+  const observer = new MutationObserver(() => setTimeout(scan, 20));
+  document.addEventListener("DOMContentLoaded", () => {
+    scan();
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+  window.addEventListener("hashchange", () => setTimeout(scan, 30));
 })();
