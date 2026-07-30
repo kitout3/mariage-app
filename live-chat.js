@@ -67,20 +67,20 @@
       const { db, fs } = await firebase();
       const q = fs.query(
         fs.collection(db, COLLECTION),
-        fs.where("eventId", "==", EVENT_ID),
         fs.orderBy("createdAt", "asc"),
         fs.limit(150)
       );
 
       unsubscribe?.();
       unsubscribe = fs.onSnapshot(q, snap => {
+        const docs = snap.docs.filter(doc => doc.data().eventId === EVENT_ID);
         list.innerHTML = "";
-        count.textContent = `${snap.size}`;
-        if (!snap.size) {
+        count.textContent = docs.length ? String(docs.length) : "";
+        if (!docs.length) {
           list.innerHTML = `<p style="margin:auto;color:#9e7060;font-size:.85rem">${t("empty")}</p>`;
           return;
         }
-        snap.docs.forEach(doc => {
+        docs.forEach(doc => {
           const item = doc.data();
           const row = document.createElement("article");
           row.style.cssText = "background:#fdf8f4;border:1px solid #f5ddd4;border-radius:12px;padding:8px 10px";
