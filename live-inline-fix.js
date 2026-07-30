@@ -10,33 +10,9 @@
   }
 
   const TXT = {
-    fr: {
-      back: "Retour à l’accueil",
-      title: "Cérémonie en direct",
-      loading: "Chargement du direct…",
-      empty: "Le direct n’est pas encore configuré.",
-      hint: "Ajoutez le lien YouTube dans Administration → Paramètres.",
-      error: "Impossible de charger le direct pour le moment.",
-      open: "Ouvrir sur YouTube"
-    },
-    en: {
-      back: "Back to home",
-      title: "Live ceremony",
-      loading: "Loading live stream…",
-      empty: "The live stream is not configured yet.",
-      hint: "Add the YouTube link in Administration → Settings.",
-      error: "The live stream cannot be loaded right now.",
-      open: "Open on YouTube"
-    },
-    vi: {
-      back: "Về trang chủ",
-      title: "Lễ cưới trực tiếp",
-      loading: "Đang tải buổi phát trực tiếp…",
-      empty: "Buổi phát trực tiếp chưa được cấu hình.",
-      hint: "Thêm liên kết YouTube trong Quản trị → Cài đặt.",
-      error: "Hiện không thể tải buổi phát trực tiếp.",
-      open: "Mở trên YouTube"
-    }
+    fr: { back: "Retour à l’accueil", title: "Cérémonie en direct", loading: "Chargement du direct…", empty: "Le direct n’est pas encore configuré.", hint: "Ajoutez le lien du direct dans Administration → Paramètres.", error: "Impossible de charger le direct pour le moment.", open: "Ouvrir le direct" },
+    en: { back: "Back to home", title: "Live ceremony", loading: "Loading live stream…", empty: "The live stream is not configured yet.", hint: "Add the live link in Administration → Settings.", error: "The live stream cannot be loaded right now.", open: "Open live stream" },
+    vi: { back: "Về trang chủ", title: "Lễ cưới trực tiếp", loading: "Đang tải buổi phát trực tiếp…", empty: "Buổi phát trực tiếp chưa được cấu hình.", hint: "Thêm liên kết trực tiếp trong Quản trị → Cài đặt.", error: "Hiện không thể tải buổi phát trực tiếp.", open: "Mở buổi phát trực tiếp" }
   };
 
   function text() { return TXT[lang()]; }
@@ -57,8 +33,9 @@
 
   function toPlayerUrl(config) {
     if (config.playerUrl) return config.playerUrl;
-    const id = youtubeId(config.liveUrl || config.externalUrl || "");
-    return id ? `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&playsinline=1` : "";
+    const raw = config.liveUrl || config.externalUrl || "";
+    const id = youtubeId(raw);
+    return id ? `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&playsinline=1` : raw;
   }
 
   function decodeFirestore(fields) {
@@ -107,7 +84,7 @@
 
     if (currentPlayerUrl === playerUrl && body.querySelector("iframe")) return;
     currentPlayerUrl = playerUrl;
-    body.innerHTML = `<iframe src="${playerUrl}" title="${t.title}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen style="width:100%;height:100%;border:0;background:#000"></iframe>${external ? `<a href="${external}" target="_blank" rel="noopener" style="position:absolute;right:18px;bottom:18px;background:rgba(0,0,0,.65);color:white;padding:9px 14px;border-radius:999px;text-decoration:none;font-size:.82rem">${t.open}</a>` : ""}`;
+    body.innerHTML = `<iframe src="${playerUrl}" title="${t.title}" allow="autoplay; camera; microphone; encrypted-media; picture-in-picture; fullscreen" allowfullscreen style="width:100%;height:100%;border:0;background:#000"></iframe>${external ? `<a href="${external}" target="_blank" rel="noopener" style="position:absolute;right:18px;bottom:18px;background:rgba(0,0,0,.65);color:white;padding:9px 14px;border-radius:999px;text-decoration:none;font-size:.82rem">${t.open}</a>` : ""}`;
   }
 
   async function refreshLive(panel) {
@@ -127,11 +104,11 @@
     const panel = document.createElement("section");
     panel.id = PANEL_ID;
     panel.innerHTML = `
-      <header style="height:68px;display:flex;align-items:center;padding:10px 16px;background:#fffdf9;border-bottom:1px solid #f5ddd4;position:relative;z-index:2">
+      <header style="height:68px;display:flex;align-items:center;padding:10px 16px;background:#fffdf9;border-bottom:1px solid #f5ddd4;position:relative;z-index:2;flex:none">
         <button data-live-back type="button" style="border:0;background:#5c2a1e;color:white;border-radius:999px;padding:10px 17px;cursor:pointer">← ${t.back}</button>
         <strong style="position:absolute;left:50%;transform:translateX(-50%);font:400 22px 'Cormorant Garamond',Georgia,serif;color:#5c2a1e;white-space:nowrap">Huyen & Quentin · Live</strong>
       </header>
-      <div data-live-body style="position:relative;flex:1;display:flex;align-items:center;justify-content:center;background:#fdf8f4;min-height:0">
+      <div data-live-body style="position:relative;flex:1;display:flex;align-items:center;justify-content:center;background:#fdf8f4;min-height:180px">
         <div style="color:#9e7060">${t.loading}</div>
       </div>`;
     Object.assign(panel.style, { position: "fixed", inset: "0", zIndex: "2147483646", display: "flex", flexDirection: "column", background: "#fdf8f4" });
@@ -142,7 +119,11 @@
   }
 
   function bindLiveCard() {
-    const card = document.getElementById("wedding-live-card") || [...document.querySelectorAll("button")].find(button => /Regarder le live|Watch live|Xem trực tiếp/i.test(button.textContent));
+    const candidates = [
+      document.getElementById("wedding-live-card"),
+      ...document.querySelectorAll('a[href*="live.html"], a[href="#live"], button')
+    ].filter(Boolean);
+    const card = candidates.find(element => /Regarder le live|Watch live|Xem trực tiếp|Cérémonie en direct|Live ceremony/i.test(element.textContent || "") || /live\.html|#live/.test(element.getAttribute?.("href") || ""));
     if (!card || card.dataset.inlineLiveBound) return;
     card.dataset.inlineLiveBound = "true";
     card.addEventListener("click", event => {
