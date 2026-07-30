@@ -66,22 +66,25 @@
       const db = fs.getFirestore(app);
       const query = fs.query(
         fs.collection(db, COLLECTION),
-        fs.where("eventId", "==", EVENT_ID),
         fs.orderBy("createdAt", "asc"),
-        fs.limit(150)
+        fs.limit(300)
       );
 
       fs.onSnapshot(query, snapshot => {
-        count.textContent = snapshot.size ? String(snapshot.size) : "";
+        const messages = snapshot.docs
+          .map(documentSnapshot => documentSnapshot.data())
+          .filter(item => item.eventId === EVENT_ID)
+          .slice(-150);
+
+        count.textContent = messages.length ? String(messages.length) : "";
         list.innerHTML = "";
 
-        if (!snapshot.size) {
+        if (!messages.length) {
           list.innerHTML = `<p class="chat-empty">${t("empty")}</p>`;
           return;
         }
 
-        snapshot.docs.forEach(documentSnapshot => {
-          const item = documentSnapshot.data();
+        messages.forEach(item => {
           const row = document.createElement("article");
           row.className = "chat-message";
           row.innerHTML = `
