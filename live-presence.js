@@ -53,17 +53,19 @@
     badge = document.createElement("div");
     badge.id = BADGE_ID;
     badge.setAttribute("aria-live", "polite");
-    badge.style.cssText = "display:inline-flex;align-items:center;gap:7px;background:#fdf8f4;border:1px solid #f5ddd4;color:#5c2a1e;border-radius:999px;padding:8px 12px;font-size:.82rem;font-weight:600;white-space:nowrap;margin-left:auto";
+    badge.style.cssText = "display:flex;align-items:center;justify-content:center;gap:8px;width:100%;box-sizing:border-box;background:#fffdf9;border-top:1px solid #f5ddd4;border-bottom:1px solid #f5ddd4;color:#5c2a1e;padding:10px 14px;font-size:.86rem;font-weight:600;white-space:nowrap;flex:0 0 auto;position:relative;z-index:1";
     badge.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:#2e9d58;box-shadow:0 0 0 4px rgba(46,157,88,.14)"></span><span data-viewer-count>${label(1)}</span>`;
 
-    const header = panel.querySelector("header");
-    if (header) {
-      const title = header.querySelector("strong");
-      if (title) title.style.position = "static";
-      header.style.gap = "12px";
-      header.appendChild(badge);
+    const liveBody = panel.querySelector("[data-live-body]");
+    const chat = panel.querySelector("#wedding-live-chat");
+    if (chat) {
+      panel.insertBefore(badge, chat);
+    } else if (liveBody?.nextSibling) {
+      panel.insertBefore(badge, liveBody.nextSibling);
+    } else if (liveBody) {
+      liveBody.insertAdjacentElement("afterend", badge);
     } else {
-      panel.prepend(badge);
+      panel.appendChild(badge);
     }
     return badge;
   }
