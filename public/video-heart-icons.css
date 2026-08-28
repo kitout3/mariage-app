@@ -1,0 +1,22 @@
+.vt-heart-label {
+  inset: 0;
+  gap: 0;
+}
+
+.vt-heart-label > span:not(.vt-heart-icon) {
+  display: none;
+}
+
+.vt-heart-icon {
+  font-size: clamp(2.8rem, 10vw, 4.5rem);
+}
+
+@media (max-width: 480px) {
+  .vt-heart-label {
+    inset: 0;
+  }
+
+  .vt-heart-icon {
+    font-size: 3rem;
+  }
+}
