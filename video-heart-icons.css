@@ -11,9 +11,10 @@
   font-size: clamp(2.8rem, 10vw, 4.5rem);
 }
 
-/* La page témoignage vidéo tient toujours dans la hauteur de l'écran. */
+/* La page témoignage vidéo reste toujours sur un seul écran. */
 html:has(#vt-overlay),
 body:has(#vt-overlay) {
+  width: 100%;
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
@@ -24,271 +25,371 @@ body:has(#vt-overlay) {
   min-height: 0;
   overflow: hidden;
   overscroll-behavior: none;
-  padding: 10px 12px;
+  padding: 0;
 }
 
 #vt-overlay .vt-shell {
+  position: relative;
+  width: 100%;
   height: 100%;
+  max-width: none;
+  margin: 0;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
-#vt-overlay .vt-shell > [data-close] {
-  flex: 0 0 auto;
-  align-self: flex-start;
-  padding: 8px 14px;
-  line-height: 1.2;
-}
-
+/* Suppression du titre, du sous-titre et de l'espace qui les entourait. */
+#vt-overlay .vt-panel > div:first-child,
 #vt-overlay .vt-shell > div[style*="height:14px"] {
-  height: 6px !important;
-  flex: 0 0 6px;
+  display: none !important;
+}
+
+/* Retour accueil flottant au-dessus de l'image. */
+#vt-overlay .vt-shell > [data-close] {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 50;
+  margin: 0;
+  padding: 9px 14px;
+  color: #fff;
+  background: rgba(20, 12, 10, .56);
+  border: 1px solid rgba(255, 255, 255, .28);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .2);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 #vt-overlay .vt-panel {
-  flex: 1 1 auto;
+  position: relative;
+  width: 100%;
+  height: 100%;
   min-height: 0;
+  padding: 0;
+  gap: 0;
   overflow: hidden;
-  padding: 14px;
-  gap: 8px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-#vt-overlay .vt-panel > div:first-child h1 {
-  font-size: clamp(1.45rem, 4vw, 2rem) !important;
-  line-height: 1;
-}
-
-#vt-overlay .vt-panel > div:first-child p {
-  margin-top: 2px;
-  line-height: 1.2;
-}
-
-#vt-overlay .vt-panel > p[style*="font-size:.82rem"] {
-  line-height: 1.2;
+/* État initial : seuls les deux cœurs restent visibles au centre. */
+#vt-overlay .vt-panel > .vt-heart-actions {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 20;
+  width: min(520px, 86vw);
+  max-width: 520px;
   margin: 0;
+  transform: translate(-50%, -50%);
+}
+
+/* Le texte d'information ne consomme plus d'espace visuel. */
+#vt-overlay .vt-panel > p[style*="font-size:.82rem"] {
+  display: none !important;
 }
 
 #vt-overlay [data-status] {
-  min-height: 16px !important;
-  line-height: 1.1;
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 45;
+  min-height: 0 !important;
+  max-width: min(70vw, 560px);
   margin: 0;
-  font-size: .78rem;
+  padding: 6px 10px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(20, 12, 10, .5);
+  font-size: .76rem;
+  line-height: 1.15;
+  text-align: center;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-#vt-overlay [data-send] {
-  padding: 9px 16px;
+#vt-overlay [data-status]:empty {
+  display: none;
 }
 
-/* Mode caméra : aperçu principal large + commandes cœur à droite. */
-.vt-shell:has(.vt-camera[style*="display: block"]) {
-  max-width: 1080px;
+/* MODE CAMÉRA : le retour caméra devient la surface principale. */
+#vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) {
+  display: block;
 }
 
-.vt-panel:has(> .vt-camera[style*="display: block"]) {
-  grid-template-columns: minmax(0, 1fr) 84px;
-  grid-template-rows: auto minmax(0, 1fr) auto auto auto auto;
-  column-gap: 12px;
-  row-gap: 6px;
-  align-items: stretch;
-}
-
-.vt-panel:has(> .vt-camera[style*="display: block"]) > :not(.vt-heart-actions):not(.vt-camera) {
-  grid-column: 1 / -1;
-}
-
-.vt-panel:has(> .vt-camera[style*="display: block"]) > div:first-child {
-  grid-row: 1;
-}
-
-.vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera {
-  grid-column: 1;
-  grid-row: 2;
-  width: 100%;
+#vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: min(94vw, 1240px);
+  height: 82dvh;
   min-width: 0;
   min-height: 0;
-  height: 100%;
+  transform: translate(-50%, -50%);
+  border-radius: 22px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .28);
 }
 
-.vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera video {
+#vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera video {
   width: 100%;
   height: 100%;
   min-height: 0;
   max-height: none;
   object-fit: contain;
+  background: #000;
 }
 
-.vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-heart-actions {
-  grid-column: 2;
-  grid-row: 2;
+/* Minuteur directement sur la vidéo. */
+#vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-timer {
+  top: 14px;
+  left: 14px;
+  z-index: 8;
+}
+
+/* Les deux cœurs deviennent de petites commandes verticales en haut à droite. */
+#vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-heart-actions {
+  top: calc(9dvh + 14px);
+  right: calc(3vw + 14px);
+  left: auto;
+  z-index: 30;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
   gap: 8px;
-  width: 84px;
+  width: 72px;
   max-width: none;
-  margin: 0;
-  align-self: start;
+  transform: none;
 }
 
-.vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-btn {
-  width: 84px;
+#vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-btn {
+  width: 72px;
+  aspect-ratio: 1 / 1;
+  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, .32));
+}
+
+#vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-icon {
+  font-size: 1.45rem;
+}
+
+/* Démarrer / arrêter flottent au centre en bas de la vidéo. */
+#vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > [data-record-actions] {
+  position: absolute;
+  left: 50%;
+  bottom: calc(9dvh + 18px);
+  z-index: 35;
+  display: flex !important;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
+  margin: 0;
+  transform: translateX(-50%);
+}
+
+#vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > [data-record-actions] .vt-btn {
+  padding: 9px 15px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Envoyer la vidéo flotte en bas à droite de l'image. */
+#vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > [data-send] {
+  position: absolute;
+  right: calc(3vw + 18px);
+  bottom: calc(9dvh + 18px);
+  z-index: 35;
+  width: auto;
+  margin: 0;
+  padding: 9px 15px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .22);
+}
+
+/* Barre d'envoi superposée au bas de la vidéo. */
+#vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-progress {
+  position: absolute;
+  left: 50%;
+  bottom: calc(9dvh + 8px);
+  z-index: 34;
+  width: min(42vw, 520px);
+  height: 5px;
+  margin: 0;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, .28);
+}
+
+/* APERÇU APRÈS ENREGISTREMENT : même principe, vidéo dominante et commandes en calque. */
+#vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) {
+  display: block;
+}
+
+#vt-overlay [data-preview][style*="display: block"] {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: min(94vw, 1240px) !important;
+  height: 82dvh !important;
+  max-height: none !important;
+  transform: translate(-50%, -50%);
+  border-radius: 22px !important;
+  object-fit: contain;
+  background: #000;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .28);
+}
+
+#vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) > .vt-heart-actions {
+  top: calc(9dvh + 14px);
+  right: calc(3vw + 14px);
+  left: auto;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 72px;
+  max-width: none;
+  transform: none;
+}
+
+#vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) .vt-heart-btn {
+  width: 72px;
   aspect-ratio: 1 / 1;
 }
 
-.vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-icon {
-  font-size: 1.6rem;
+#vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) .vt-heart-icon {
+  font-size: 1.45rem;
 }
 
-.vt-panel:has(> .vt-camera[style*="display: block"]) > [data-record-actions] {
-  grid-row: 3;
-  justify-content: center;
-  gap: 8px;
+#vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) > [data-retry] {
+  position: absolute;
+  left: calc(3vw + 18px);
+  bottom: calc(9dvh + 18px);
+  z-index: 35;
+  display: inline-block !important;
+  margin: 0;
+  padding: 9px 15px;
+  color: #fff;
+  background: rgba(20, 12, 10, .56);
+  border: 1px solid rgba(255, 255, 255, .25);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-.vt-panel:has(> .vt-camera[style*="display: block"]) > [data-record-actions] .vt-btn {
-  padding: 8px 14px;
+#vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) > [data-send] {
+  position: absolute;
+  right: calc(3vw + 18px);
+  bottom: calc(9dvh + 18px);
+  z-index: 35;
+  width: auto;
+  margin: 0;
+  padding: 9px 15px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .22);
 }
 
-.vt-panel:has(> .vt-camera[style*="display: block"]) > p[style*="font-size:.82rem"] {
-  grid-row: 4;
-}
-
-.vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-progress {
-  grid-row: 5;
-}
-
-.vt-panel:has(> .vt-camera[style*="display: block"]) > [data-send] {
-  grid-row: 6;
-}
-
-/* L'aperçu après enregistrement reste lui aussi dans une seule page. */
-#vt-overlay [data-preview][style*="display: block"] {
-  width: 100% !important;
-  min-height: 0;
-  max-height: min(48dvh, 430px) !important;
-  object-fit: contain;
+#vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) > .vt-progress {
+  position: absolute;
+  left: 50%;
+  bottom: calc(9dvh + 8px);
+  z-index: 34;
+  width: min(42vw, 520px);
+  height: 5px;
+  margin: 0;
+  transform: translateX(-50%);
 }
 
 @media (max-width: 600px) {
-  #vt-overlay.vt-overlay {
-    padding: 7px 8px;
-  }
-
   #vt-overlay .vt-shell > [data-close] {
-    padding: 7px 11px;
-    font-size: .78rem;
+    top: 10px;
+    left: 10px;
+    padding: 8px 11px;
+    font-size: .74rem;
   }
 
-  #vt-overlay .vt-shell > div[style*="height:14px"] {
-    height: 4px !important;
-    flex-basis: 4px;
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera,
+  #vt-overlay [data-preview][style*="display: block"] {
+    width: 96vw !important;
+    height: 84dvh !important;
+    border-radius: 17px !important;
   }
 
-  #vt-overlay .vt-panel {
-    padding: 9px 8px;
-    gap: 5px;
-  }
-
-  #vt-overlay .vt-panel > div:first-child > div:first-child {
-    font-size: 28px !important;
-    line-height: 1;
-  }
-
-  #vt-overlay .vt-panel > div:first-child h1 {
-    font-size: 1.35rem !important;
-  }
-
-  #vt-overlay .vt-panel > div:first-child p {
-    font-size: .75rem;
-  }
-
-  .vt-heart-actions {
-    gap: 7px;
-    margin: 0 auto 2px;
-  }
-
-  .vt-heart-label {
-    inset: 0;
-  }
-
-  .vt-heart-icon {
-    font-size: clamp(2.2rem, 12vw, 3rem);
-  }
-
-  .vt-panel:has(> .vt-camera[style*="display: block"]) {
-    grid-template-columns: minmax(0, 1fr) 58px;
-    column-gap: 6px;
-    row-gap: 4px;
-  }
-
-  .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-heart-actions {
-    width: 58px;
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-heart-actions,
+  #vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) > .vt-heart-actions {
+    top: calc(8dvh + 10px);
+    right: calc(2vw + 8px);
+    width: 56px;
     gap: 6px;
   }
 
-  .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-btn {
-    width: 58px;
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-btn,
+  #vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) .vt-heart-btn {
+    width: 56px;
   }
 
-  .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-icon {
-    font-size: 1.2rem;
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-icon,
+  #vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) .vt-heart-icon {
+    font-size: 1.15rem;
   }
 
-  .vt-panel:has(> .vt-camera[style*="display: block"]) > [data-record-actions] .vt-btn {
-    padding: 7px 10px;
-    font-size: .76rem;
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > [data-record-actions] {
+    bottom: calc(8dvh + 12px);
+    gap: 5px;
   }
 
-  #vt-overlay [data-send] {
-    padding: 8px 12px;
-    font-size: .82rem;
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > [data-record-actions] .vt-btn {
+    padding: 8px 10px;
+    font-size: .7rem;
   }
 
-  #vt-overlay .vt-panel > p[style*="font-size:.82rem"] {
-    font-size: .68rem !important;
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > [data-send],
+  #vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) > [data-send] {
+    right: calc(2vw + 10px);
+    bottom: calc(8dvh + 12px);
+    padding: 8px 10px;
+    font-size: .7rem;
   }
 
-  #vt-overlay [data-preview][style*="display: block"] {
-    max-height: 40dvh !important;
-  }
-}
-
-/* Très petits écrans en hauteur : priorité absolue à la caméra et aux commandes. */
-@media (max-height: 650px) {
-  #vt-overlay.vt-overlay {
-    padding-top: 5px;
-    padding-bottom: 5px;
-  }
-
-  #vt-overlay .vt-panel {
-    padding-top: 6px;
-    padding-bottom: 6px;
-  }
-
-  #vt-overlay .vt-panel > div:first-child > div:first-child {
-    display: none;
-  }
-
-  #vt-overlay .vt-panel > div:first-child h1 {
-    font-size: 1.2rem !important;
-  }
-
-  #vt-overlay .vt-panel > div:first-child p {
-    font-size: .68rem;
-  }
-
-  #vt-overlay .vt-panel > p[style*="font-size:.82rem"] {
-    font-size: .62rem !important;
-    line-height: 1.05;
+  #vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) > [data-retry] {
+    left: calc(2vw + 10px);
+    bottom: calc(8dvh + 12px);
+    padding: 8px 10px;
+    font-size: .7rem;
   }
 
   #vt-overlay [data-status] {
-    min-height: 12px !important;
-    font-size: .68rem;
+    bottom: 7px;
+    max-width: 84vw;
+    font-size: .66rem;
   }
 
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-progress,
+  #vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) > .vt-progress {
+    bottom: calc(8dvh + 5px);
+    width: 46vw;
+  }
+}
+
+@media (max-height: 650px) {
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera,
   #vt-overlay [data-preview][style*="display: block"] {
-    max-height: 34dvh !important;
+    height: 88dvh !important;
+  }
+
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-heart-actions,
+  #vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) > .vt-heart-actions {
+    top: calc(6dvh + 8px);
+  }
+
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > [data-record-actions],
+  #vt-overlay .vt-panel:has(> .vt-camera[style*="display: block"]) > [data-send],
+  #vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) > [data-send],
+  #vt-overlay .vt-panel:has(> [data-preview][style*="display: block"]) > [data-retry] {
+    bottom: calc(6dvh + 10px);
   }
 }
