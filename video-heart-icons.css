@@ -11,12 +11,96 @@
   font-size: clamp(2.8rem, 10vw, 4.5rem);
 }
 
-@media (max-width: 480px) {
+/* Mode caméra : aperçu principal large + commandes cœur à droite */
+.vt-shell:has(.vt-camera[style*="display: block"]) {
+  max-width: 1080px;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) {
+  grid-template-columns: minmax(0, 1fr) 92px;
+  column-gap: 16px;
+  align-items: start;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) > :not(.vt-heart-actions):not(.vt-camera) {
+  grid-column: 1 / -1;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera {
+  grid-column: 1;
+  grid-row: 2;
+  width: 100%;
+  min-height: 460px;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera video {
+  width: 100%;
+  height: min(68vh, 680px);
+  max-height: none;
+  object-fit: contain;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-heart-actions {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 92px;
+  max-width: none;
+  margin: 0;
+  align-self: start;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-btn {
+  width: 92px;
+  aspect-ratio: 1 / 1;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-icon {
+  font-size: 1.75rem;
+}
+
+@media (max-width: 600px) {
+  .vt-panel {
+    padding: 18px 12px;
+  }
+
+  .vt-heart-actions {
+    gap: 8px;
+  }
+
   .vt-heart-label {
     inset: 0;
   }
 
   .vt-heart-icon {
     font-size: 3rem;
+  }
+
+  .vt-panel:has(> .vt-camera[style*="display: block"]) {
+    grid-template-columns: minmax(0, 1fr) 64px;
+    column-gap: 8px;
+  }
+
+  .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera {
+    min-height: 360px;
+  }
+
+  .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera video {
+    height: min(60vh, 520px);
+  }
+
+  .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-heart-actions {
+    width: 64px;
+    gap: 8px;
+  }
+
+  .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-btn {
+    width: 64px;
+  }
+
+  .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-icon {
+    font-size: 1.35rem;
   }
 }
