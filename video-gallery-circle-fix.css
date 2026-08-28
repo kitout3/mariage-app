@@ -1,0 +1,5 @@
+/* La galerie vidéo ne doit pas afficher le cercle décoratif de l'écran de sélection. */
+#vt-overlay .vt-panel:has(.vt-gallery-grid)::before {
+  content: none !important;
+  display: none !important;
+}
