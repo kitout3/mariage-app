@@ -57,6 +57,12 @@
     .vt-shell{max-width:760px;margin:0 auto}.vt-panel{background:#fffdf9;border-radius:22px;padding:22px;box-shadow:0 6px 30px rgba(92,42,30,.16)}
     .vt-btn{border:0;border-radius:999px;padding:12px 18px;cursor:pointer;font-weight:600}.vt-btn:disabled{opacity:.5;cursor:not-allowed}.vt-primary{background:linear-gradient(135deg,#c97a6a,#5c2a1e);color:#fff}.vt-secondary{background:#f5ddd4;color:#5c2a1e}.vt-danger{background:#9f2f2f;color:#fff}
     .vt-input{width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid #f5ddd4;border-radius:12px;background:#fdf8f4;font:inherit}.vt-grid{display:grid;gap:12px}.vt-actions{display:flex;gap:9px;flex-wrap:wrap}
+    .vt-heart-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;width:100%;max-width:520px;margin:4px auto 8px}
+    .vt-heart-btn{--heart-fill:#8b443b;--heart-text:#fff;position:relative;width:100%;aspect-ratio:1.08/1;min-width:0;padding:0;border:0;background:transparent;cursor:pointer;font:inherit;filter:drop-shadow(0 8px 14px rgba(92,42,30,.18));transition:transform .2s ease,filter .2s ease}
+    .vt-heart-btn:hover{transform:translateY(-3px) scale(1.02);filter:drop-shadow(0 11px 18px rgba(92,42,30,.24))}.vt-heart-btn:active{transform:translateY(0) scale(.98)}.vt-heart-btn:focus-visible{outline:3px solid rgba(92,42,30,.3);outline-offset:4px;border-radius:42%}
+    .vt-heart-choose{--heart-fill:#efc9bf;--heart-text:#5c2a1e}.vt-heart-shape{position:absolute;inset:0;width:100%;height:100%;overflow:visible}.vt-heart-shape path{fill:var(--heart-fill);transition:fill .2s ease}
+    .vt-heart-label{position:absolute;inset:25% 12% 18%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--heart-text);font-size:clamp(.78rem,2.4vw,.95rem);font-weight:600;line-height:1.12;text-align:center;pointer-events:none}.vt-heart-icon{font-size:clamp(1.45rem,4.5vw,2rem);line-height:1}
+    @media (max-width:480px){.vt-panel{padding:18px 14px}.vt-heart-actions{gap:8px}.vt-heart-label{inset:24% 8% 18%;font-size:.78rem}.vt-heart-icon{font-size:1.5rem}}
     .vt-progress{height:10px;border-radius:999px;background:#f5ddd4;overflow:hidden}.vt-progress>div{height:100%;background:#5c2a1e;transition:width .2s}
     .vt-camera{position:relative;background:#000;border-radius:16px;overflow:hidden}.vt-camera video{display:block;width:100%;max-height:460px;object-fit:contain}.vt-timer{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.66);color:#fff;padding:7px 10px;border-radius:999px;font-weight:700}
     .vt-admin{margin-top:16px;background:#fffdf9;border-radius:18px;padding:18px;box-shadow:0 2px 12px rgba(92,42,30,.12)}.vt-item{border:1px solid #f5ddd4;border-radius:14px;padding:12px;display:grid;gap:9px;margin-top:10px}.vt-mini{border:0;border-radius:999px;padding:7px 11px;cursor:pointer}
@@ -90,7 +96,7 @@
     });
   }
 
-  async function uploadVideo(file,author,message,onProgress) {
+  async function uploadVideo(file,onProgress) {
     const {db,storage,fs,st}=await firebase();
     const id=`${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
     const ext=(file.name.split(".").pop()||"webm").replace(/[^a-z0-9]/gi,"").toLowerCase();
@@ -99,7 +105,7 @@
     const snap=await new Promise((resolve,reject)=>task.on("state_changed",s=>onProgress(Math.round(s.bytesTransferred/s.totalBytes*100)),reject,()=>resolve(task.snapshot)));
     const url=await st.getDownloadURL(snap.ref);
     const duration=Math.round(await getDuration(file));
-    const doc=await fs.addDoc(fs.collection(db,"videoTestimonials"),{eventId:EVENT_ID,url,path,author:author||null,message:message||null,duration,size:file.size,mimeType:file.type,status:"pending",createdAt:fs.serverTimestamp(),selectedForTv:false});
+    const doc=await fs.addDoc(fs.collection(db,"videoTestimonials"),{eventId:EVENT_ID,url,path,author:null,message:null,duration,size:file.size,mimeType:file.type,status:"pending",createdAt:fs.serverTimestamp(),selectedForTv:false});
     return {id:doc.id,url};
   }
 
@@ -117,7 +123,8 @@
   async function openGuest(){
     closeOverlay();history.replaceState(null,"",`${location.pathname}${location.search}#video`);
     const el=document.createElement("section");el.id="vt-overlay";el.className="vt-overlay";
-    el.innerHTML=`<div class="vt-shell"><button class="vt-btn vt-secondary" data-close>← ${t("back")}</button><div style="height:14px"></div><div class="vt-panel vt-grid"><div style="text-align:center"><div style="font-size:42px">🎬</div><h1 style="font:300 2.2rem 'Cormorant Garamond',serif;color:#5c2a1e;margin:.2rem">${t("title")}</h1><p style="color:#9e7060">${t("subtitle")}</p></div><input class="vt-input" data-name placeholder="${t("firstName")}"><textarea class="vt-input" data-message rows="3" placeholder="${t("message")}"></textarea><input data-file type="file" accept="video/mp4,video/quicktime,video/webm" hidden><div class="vt-actions"><button class="vt-btn vt-primary" data-camera>🎥 ${t("record")}</button><button class="vt-btn vt-secondary" data-choose>📁 ${t("choose")}</button></div><div class="vt-camera" data-camera-box style="display:none"><video data-live autoplay muted playsinline></video><span class="vt-timer" data-timer>00:00 / 05:00</span></div><div class="vt-actions" data-record-actions style="display:none"><button class="vt-btn vt-primary" data-start>● ${t("start")}</button><button class="vt-btn vt-danger" data-stop disabled>■ ${t("stop")}</button></div><video data-preview controls playsinline style="display:none;width:100%;max-height:460px;border-radius:15px;background:#000"></video><button class="vt-btn vt-secondary" data-retry style="display:none">↻ ${t("retry")}</button><p style="font-size:.82rem;color:#9e7060">${t("moderationNote")}</p><div class="vt-progress" style="display:none"><div style="width:0"></div></div><button class="vt-btn vt-primary" data-send disabled>⬆️ ${t("send")}</button><p data-status style="min-height:22px;text-align:center"></p></div></div>`;
+    const heart=`<svg class="vt-heart-shape" viewBox="0 0 200 190" aria-hidden="true" focusable="false"><path d="M100 182C93 176 22 121 22 70C22 37 45 18 71 18C88 18 98 28 100 32C102 28 112 18 129 18C155 18 178 37 178 70C178 121 107 176 100 182Z"></path></svg>`;
+    el.innerHTML=`<div class="vt-shell"><button class="vt-btn vt-secondary" data-close>← ${t("back")}</button><div style="height:14px"></div><div class="vt-panel vt-grid"><div style="text-align:center"><div style="font-size:42px">🎬</div><h1 style="font:300 2.2rem 'Cormorant Garamond',serif;color:#5c2a1e;margin:.2rem">${t("title")}</h1><p style="color:#9e7060">${t("subtitle")}</p></div><input data-file type="file" accept="video/mp4,video/quicktime,video/webm" hidden><div class="vt-heart-actions"><button class="vt-heart-btn vt-heart-record" data-camera aria-label="${t("record")}">${heart}<span class="vt-heart-label"><span class="vt-heart-icon">🎥</span><span>${t("record")}</span></span></button><button class="vt-heart-btn vt-heart-choose" data-choose aria-label="${t("choose")}">${heart}<span class="vt-heart-label"><span class="vt-heart-icon">📁</span><span>${t("choose")}</span></span></button></div><div class="vt-camera" data-camera-box style="display:none"><video data-live autoplay muted playsinline></video><span class="vt-timer" data-timer>00:00 / 05:00</span></div><div class="vt-actions" data-record-actions style="display:none"><button class="vt-btn vt-primary" data-start>● ${t("start")}</button><button class="vt-btn vt-danger" data-stop disabled>■ ${t("stop")}</button></div><video data-preview controls playsinline style="display:none;width:100%;max-height:460px;border-radius:15px;background:#000"></video><button class="vt-btn vt-secondary" data-retry style="display:none">↻ ${t("retry")}</button><p style="font-size:.82rem;color:#9e7060">${t("moderationNote")}</p><div class="vt-progress" style="display:none"><div style="width:0"></div></div><button class="vt-btn vt-primary" data-send disabled>⬆️ ${t("send")}</button><p data-status style="min-height:22px;text-align:center"></p></div></div>`;
     document.body.appendChild(el);
 
     const q=s=>el.querySelector(s), fileInput=q("[data-file]"), preview=q("[data-preview]"), live=q("[data-live]"), status=q("[data-status]"), send=q("[data-send]"), bar=q(".vt-progress"), fill=bar.firstElementChild, cameraBox=q("[data-camera-box]"), recordActions=q("[data-record-actions]"), startBtn=q("[data-start]"), stopBtn=q("[data-stop]"), retryBtn=q("[data-retry]"), timer=q("[data-timer]");
@@ -133,7 +140,7 @@
     q("[data-close]").onclick=()=>{if(recorder?.state==="recording")recorder.stop();cleanupStream();closeOverlay()};
     q("[data-camera]").onclick=openCamera;q("[data-choose]").onclick=()=>fileInput.click();startBtn.onclick=startRecording;stopBtn.onclick=stopRecording;retryBtn.onclick=openCamera;
     fileInput.onchange=async e=>{const f=e.target.files?.[0];if(await validate(f))setPreview(f)};
-    send.onclick=async()=>{if(!file)return;send.disabled=true;bar.style.display="block";status.textContent=t("uploading");try{await uploadVideo(file,q("[data-name]").value.trim(),q("[data-message]").value.trim(),p=>{fill.style.width=`${p}%`;status.textContent=`${t("uploading")} ${p}%`});status.textContent=t("success");setTimeout(closeOverlay,1800)}catch(e){console.error(e);status.textContent=t("error");send.disabled=false}};
+    send.onclick=async()=>{if(!file)return;send.disabled=true;bar.style.display="block";status.textContent=t("uploading");try{await uploadVideo(file,p=>{fill.style.width=`${p}%`;status.textContent=`${t("uploading")} ${p}%`});status.textContent=t("success");setTimeout(closeOverlay,1800)}catch(e){console.error(e);status.textContent=t("error");send.disabled=false}};
   }
 
   async function openGallery(){
