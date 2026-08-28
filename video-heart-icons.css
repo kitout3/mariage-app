@@ -11,31 +11,109 @@
   font-size: clamp(2.8rem, 10vw, 4.5rem);
 }
 
-/* Mode caméra : aperçu principal large + commandes cœur à droite */
+/* La page témoignage vidéo tient toujours dans la hauteur de l'écran. */
+html:has(#vt-overlay),
+body:has(#vt-overlay) {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#vt-overlay.vt-overlay {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding: 10px 12px;
+}
+
+#vt-overlay .vt-shell {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#vt-overlay .vt-shell > [data-close] {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding: 8px 14px;
+  line-height: 1.2;
+}
+
+#vt-overlay .vt-shell > div[style*="height:14px"] {
+  height: 6px !important;
+  flex: 0 0 6px;
+}
+
+#vt-overlay .vt-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px;
+  gap: 8px;
+}
+
+#vt-overlay .vt-panel > div:first-child h1 {
+  font-size: clamp(1.45rem, 4vw, 2rem) !important;
+  line-height: 1;
+}
+
+#vt-overlay .vt-panel > div:first-child p {
+  margin-top: 2px;
+  line-height: 1.2;
+}
+
+#vt-overlay .vt-panel > p[style*="font-size:.82rem"] {
+  line-height: 1.2;
+  margin: 0;
+}
+
+#vt-overlay [data-status] {
+  min-height: 16px !important;
+  line-height: 1.1;
+  margin: 0;
+  font-size: .78rem;
+}
+
+#vt-overlay [data-send] {
+  padding: 9px 16px;
+}
+
+/* Mode caméra : aperçu principal large + commandes cœur à droite. */
 .vt-shell:has(.vt-camera[style*="display: block"]) {
   max-width: 1080px;
 }
 
 .vt-panel:has(> .vt-camera[style*="display: block"]) {
-  grid-template-columns: minmax(0, 1fr) 92px;
-  column-gap: 16px;
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) 84px;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto auto;
+  column-gap: 12px;
+  row-gap: 6px;
+  align-items: stretch;
 }
 
 .vt-panel:has(> .vt-camera[style*="display: block"]) > :not(.vt-heart-actions):not(.vt-camera) {
   grid-column: 1 / -1;
 }
 
+.vt-panel:has(> .vt-camera[style*="display: block"]) > div:first-child {
+  grid-row: 1;
+}
+
 .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera {
   grid-column: 1;
   grid-row: 2;
   width: 100%;
-  min-height: 460px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
 .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera video {
   width: 100%;
-  height: min(68vh, 680px);
+  height: 100%;
+  min-height: 0;
   max-height: none;
   object-fit: contain;
 }
@@ -45,29 +123,89 @@
   grid-row: 2;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: 92px;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 84px;
   max-width: none;
   margin: 0;
   align-self: start;
 }
 
 .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-btn {
-  width: 92px;
+  width: 84px;
   aspect-ratio: 1 / 1;
 }
 
 .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-icon {
-  font-size: 1.75rem;
+  font-size: 1.6rem;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) > [data-record-actions] {
+  grid-row: 3;
+  justify-content: center;
+  gap: 8px;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) > [data-record-actions] .vt-btn {
+  padding: 8px 14px;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) > p[style*="font-size:.82rem"] {
+  grid-row: 4;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-progress {
+  grid-row: 5;
+}
+
+.vt-panel:has(> .vt-camera[style*="display: block"]) > [data-send] {
+  grid-row: 6;
+}
+
+/* L'aperçu après enregistrement reste lui aussi dans une seule page. */
+#vt-overlay [data-preview][style*="display: block"] {
+  width: 100% !important;
+  min-height: 0;
+  max-height: min(48dvh, 430px) !important;
+  object-fit: contain;
 }
 
 @media (max-width: 600px) {
-  .vt-panel {
-    padding: 18px 12px;
+  #vt-overlay.vt-overlay {
+    padding: 7px 8px;
+  }
+
+  #vt-overlay .vt-shell > [data-close] {
+    padding: 7px 11px;
+    font-size: .78rem;
+  }
+
+  #vt-overlay .vt-shell > div[style*="height:14px"] {
+    height: 4px !important;
+    flex-basis: 4px;
+  }
+
+  #vt-overlay .vt-panel {
+    padding: 9px 8px;
+    gap: 5px;
+  }
+
+  #vt-overlay .vt-panel > div:first-child > div:first-child {
+    font-size: 28px !important;
+    line-height: 1;
+  }
+
+  #vt-overlay .vt-panel > div:first-child h1 {
+    font-size: 1.35rem !important;
+  }
+
+  #vt-overlay .vt-panel > div:first-child p {
+    font-size: .75rem;
   }
 
   .vt-heart-actions {
-    gap: 8px;
+    gap: 7px;
+    margin: 0 auto 2px;
   }
 
   .vt-heart-label {
@@ -75,32 +213,82 @@
   }
 
   .vt-heart-icon {
-    font-size: 3rem;
+    font-size: clamp(2.2rem, 12vw, 3rem);
   }
 
   .vt-panel:has(> .vt-camera[style*="display: block"]) {
-    grid-template-columns: minmax(0, 1fr) 64px;
-    column-gap: 8px;
-  }
-
-  .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera {
-    min-height: 360px;
-  }
-
-  .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-camera video {
-    height: min(60vh, 520px);
+    grid-template-columns: minmax(0, 1fr) 58px;
+    column-gap: 6px;
+    row-gap: 4px;
   }
 
   .vt-panel:has(> .vt-camera[style*="display: block"]) > .vt-heart-actions {
-    width: 64px;
-    gap: 8px;
+    width: 58px;
+    gap: 6px;
   }
 
   .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-btn {
-    width: 64px;
+    width: 58px;
   }
 
   .vt-panel:has(> .vt-camera[style*="display: block"]) .vt-heart-icon {
-    font-size: 1.35rem;
+    font-size: 1.2rem;
+  }
+
+  .vt-panel:has(> .vt-camera[style*="display: block"]) > [data-record-actions] .vt-btn {
+    padding: 7px 10px;
+    font-size: .76rem;
+  }
+
+  #vt-overlay [data-send] {
+    padding: 8px 12px;
+    font-size: .82rem;
+  }
+
+  #vt-overlay .vt-panel > p[style*="font-size:.82rem"] {
+    font-size: .68rem !important;
+  }
+
+  #vt-overlay [data-preview][style*="display: block"] {
+    max-height: 40dvh !important;
+  }
+}
+
+/* Très petits écrans en hauteur : priorité absolue à la caméra et aux commandes. */
+@media (max-height: 650px) {
+  #vt-overlay.vt-overlay {
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+
+  #vt-overlay .vt-panel {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  #vt-overlay .vt-panel > div:first-child > div:first-child {
+    display: none;
+  }
+
+  #vt-overlay .vt-panel > div:first-child h1 {
+    font-size: 1.2rem !important;
+  }
+
+  #vt-overlay .vt-panel > div:first-child p {
+    font-size: .68rem;
+  }
+
+  #vt-overlay .vt-panel > p[style*="font-size:.82rem"] {
+    font-size: .62rem !important;
+    line-height: 1.05;
+  }
+
+  #vt-overlay [data-status] {
+    min-height: 12px !important;
+    font-size: .68rem;
+  }
+
+  #vt-overlay [data-preview][style*="display: block"] {
+    max-height: 34dvh !important;
   }
 }
