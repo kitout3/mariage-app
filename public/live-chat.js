@@ -1,5 +1,7 @@
 (() => {
   const CHAT_ID = "wedding-live-chat";
+  const TOGGLE_ID = "wedding-live-chat-toggle";
+  const STYLE_ID = "wedding-live-chat-style";
   const EVENT_ID = "mariage-2026";
   const COLLECTION = "liveChatMessages";
   let mountedHost = null;
@@ -15,9 +17,9 @@
   }
 
   const texts = {
-    fr: { title: "Discussion en direct", name: "Votre prénom", message: "Écrire un message…", send: "Envoyer", empty: "Soyez le premier à écrire un message.", error: "Le chat ne peut pas être chargé.", sending: "Envoi…" },
-    en: { title: "Live chat", name: "Your name", message: "Write a message…", send: "Send", empty: "Be the first to write a message.", error: "The chat could not be loaded.", sending: "Sending…" },
-    vi: { title: "Trò chuyện trực tiếp", name: "Tên của bạn", message: "Viết tin nhắn…", send: "Gửi", empty: "Hãy là người đầu tiên gửi tin nhắn.", error: "Không thể tải trò chuyện.", sending: "Đang gửi…" }
+    fr: { title: "Discussion en direct", comments: "Commentaires", name: "Votre prénom", message: "Écrire un message…", send: "Envoyer", empty: "Soyez le premier à écrire un message.", error: "Le chat ne peut pas être chargé.", sending: "Envoi…" },
+    en: { title: "Live chat", comments: "Comments", name: "Your name", message: "Write a message…", send: "Send", empty: "Be the first to write a message.", error: "The chat could not be loaded.", sending: "Sending…" },
+    vi: { title: "Trò chuyện trực tiếp", comments: "Bình luận", name: "Tên của bạn", message: "Viết tin nhắn…", send: "Gửi", empty: "Hãy là người đầu tiên gửi tin nhắn.", error: "Không thể tải trò chuyện.", sending: "Đang gửi…" }
   };
   const t = key => texts[getLang()][key];
 
@@ -27,15 +29,153 @@
     return date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
   }
 
+  function installStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+      #wedding-live-panel [data-live-main] {
+        --wedding-chat-width: 300px;
+      }
+      #wedding-live-panel #${CHAT_ID} {
+        width: var(--wedding-chat-width);
+        flex: 0 0 var(--wedding-chat-width);
+        height: 100%;
+        min-height: 0;
+        background: #fffdf9;
+        border-left: 1px solid #f5ddd4;
+        padding: 12px;
+        display: grid;
+        grid-template-rows: auto minmax(80px, 1fr) auto;
+        gap: 9px;
+        box-sizing: border-box;
+        color: #3d2010;
+        overflow: hidden;
+        opacity: 1;
+        transform: translateX(0);
+        transition: width .25s ease, flex-basis .25s ease, padding .25s ease, opacity .2s ease, transform .25s ease;
+      }
+      #wedding-live-panel [data-live-main][data-chat-collapsed="true"] #${CHAT_ID} {
+        width: 0;
+        flex-basis: 0;
+        padding-left: 0;
+        padding-right: 0;
+        border-left: 0;
+        opacity: 0;
+        pointer-events: none;
+      }
+      #wedding-live-panel #${TOGGLE_ID} {
+        position: absolute;
+        top: 12px;
+        right: calc(var(--wedding-chat-width) + 10px);
+        z-index: 8;
+        min-height: 38px;
+        border: 1px solid rgba(255,255,255,.28);
+        border-radius: 999px;
+        padding: 7px 11px;
+        background: rgba(20,12,8,.78);
+        color: white;
+        box-shadow: 0 3px 14px rgba(0,0,0,.24);
+        backdrop-filter: blur(10px);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        font: 500 .76rem 'Jost',Arial,sans-serif;
+        transition: right .25s ease, background .2s ease;
+      }
+      #wedding-live-panel [data-live-main][data-chat-collapsed="true"] #${TOGGLE_ID} {
+        right: 12px;
+        background: rgba(92,42,30,.9);
+      }
+      #wedding-live-panel #${TOGGLE_ID} [data-chat-unread] {
+        min-width: 20px;
+        height: 20px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: #e53935;
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .66rem;
+        font-weight: 700;
+        line-height: 1;
+        box-shadow: 0 0 0 2px rgba(255,255,255,.9);
+      }
+      #wedding-live-panel #${TOGGLE_ID} [data-chat-unread][hidden] {
+        display: none;
+      }
+      #wedding-live-panel #${CHAT_ID} [data-chat-form] {
+        display: grid;
+        grid-template-columns: minmax(0,1fr) auto;
+        gap: 7px;
+        align-items: center;
+      }
+      #wedding-live-panel #${CHAT_ID} [data-chat-name] {
+        grid-column: 1 / -1;
+      }
+      @media (max-width: 760px) {
+        #wedding-live-panel [data-live-main] {
+          --wedding-chat-width: min(86vw, 320px);
+        }
+        #wedding-live-panel #${CHAT_ID} {
+          position: absolute;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 7;
+          width: var(--wedding-chat-width);
+          flex-basis: var(--wedding-chat-width);
+          box-shadow: -8px 0 28px rgba(0,0,0,.24);
+        }
+        #wedding-live-panel [data-live-main][data-chat-collapsed="true"] #${CHAT_ID} {
+          width: var(--wedding-chat-width);
+          flex-basis: var(--wedding-chat-width);
+          padding: 12px;
+          border-left: 1px solid #f5ddd4;
+          transform: translateX(100%);
+        }
+        #wedding-live-panel #${TOGGLE_ID} {
+          right: calc(var(--wedding-chat-width) + 8px);
+        }
+        #wedding-live-panel [data-live-main][data-chat-collapsed="true"] #${TOGGLE_ID} {
+          right: 10px;
+        }
+      }
+      @media (max-width: 390px) {
+        #wedding-live-panel #${TOGGLE_ID} [data-chat-toggle-label] {
+          display: none;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function setCollapsed(host, toggle, container, collapsed) {
+    host.dataset.collapsed = collapsed ? "true" : "false";
+    container.dataset.chatCollapsed = collapsed ? "true" : "false";
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  }
+
   function findOrCreateHost() {
     const panel = document.getElementById("wedding-live-panel");
     if (panel) {
-      let host = panel.querySelector(`#${CHAT_ID}`);
+      const container = panel.querySelector("[data-live-main]") || panel;
+      let host = container.querySelector(`#${CHAT_ID}`);
       if (!host) {
         host = document.createElement("section");
         host.id = CHAT_ID;
-        host.style.cssText = "height:min(40vh,360px);min-height:245px;background:#fffdf9;border-top:1px solid #f5ddd4;padding:12px 14px;display:grid;grid-template-rows:auto minmax(100px,1fr) auto;gap:9px;box-sizing:border-box;color:#3d2010";
-        panel.appendChild(host);
+        container.appendChild(host);
+      }
+      let toggle = container.querySelector(`#${TOGGLE_ID}`);
+      if (!toggle) {
+        toggle = document.createElement("button");
+        toggle.id = TOGGLE_ID;
+        toggle.type = "button";
+        toggle.setAttribute("aria-controls", CHAT_ID);
+        toggle.innerHTML = `<span aria-hidden="true">💬</span><span data-chat-toggle-label>${t("comments")}</span><span data-chat-unread hidden></span>`;
+        container.appendChild(toggle);
       }
       return host;
     }
@@ -48,13 +188,18 @@
     unsubscribe = null;
     mountedHost = host;
 
+    const container = host.parentElement;
+    const toggle = container?.querySelector?.(`#${TOGGLE_ID}`);
+    const initialCollapsed = !!toggle && window.matchMedia("(max-width: 760px)").matches;
+    if (toggle) setCollapsed(host, toggle, container, initialCollapsed);
+
     host.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <h2 style="margin:0;font:600 1.25rem 'Cormorant Garamond',Georgia,serif;color:#5c2a1e">💬 ${t("title")}</h2>
         <span data-chat-count style="font-size:.75rem;color:#9e7060"></span>
       </div>
       <div data-chat-list style="overflow:auto;display:grid;align-content:start;gap:8px;padding:2px 2px 4px"><p style="margin:auto;color:#9e7060">${t("empty")}</p></div>
-      <form data-chat-form style="display:grid;grid-template-columns:minmax(90px,130px) 1fr auto;gap:7px;align-items:center">
+      <form data-chat-form>
         <input data-chat-name maxlength="30" placeholder="${t("name")}" autocomplete="name" style="min-width:0;padding:10px 11px;border:1px solid #f5ddd4;border-radius:12px;background:#fdf8f4;font:inherit" />
         <input data-chat-message maxlength="300" placeholder="${t("message")}" required autocomplete="off" style="min-width:0;padding:10px 11px;border:1px solid #f5ddd4;border-radius:12px;background:#fdf8f4;font:inherit" />
         <button data-chat-send type="submit" style="border:0;border-radius:999px;padding:10px 15px;background:#5c2a1e;color:white;font-weight:600;cursor:pointer">${t("send")}</button>
@@ -66,6 +211,27 @@
     const nameInput = host.querySelector("[data-chat-name]");
     const messageInput = host.querySelector("[data-chat-message]");
     const sendButton = host.querySelector("[data-chat-send]");
+    const unreadBadge = toggle?.querySelector("[data-chat-unread]");
+    let previousMessageCount = null;
+    let unreadCount = 0;
+
+    const renderUnread = () => {
+      if (!unreadBadge) return;
+      unreadBadge.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+      unreadBadge.hidden = unreadCount === 0;
+    };
+
+    if (toggle) {
+      toggle.onclick = () => {
+        const collapsed = host.dataset.collapsed !== "true";
+        setCollapsed(host, toggle, container, collapsed);
+        if (!collapsed) {
+          unreadCount = 0;
+          renderUnread();
+          requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
+        }
+      };
+    }
     nameInput.value = localStorage.getItem("wedding-chat-name") || "";
 
     try {
@@ -81,7 +247,15 @@
 
       unsubscribe = fs.onSnapshot(query, snapshot => {
         const messages = snapshot.docs.map(doc => doc.data()).filter(item => item.eventId === EVENT_ID).slice(-150);
-        count.textContent = messages.length ? String(messages.length) : "";
+        count.textContent = messages.length ? `${messages.length} message${messages.length > 1 ? "s" : ""}` : "";
+        if (host.dataset.collapsed === "true") {
+          if (previousMessageCount === null) unreadCount = messages.length;
+          else if (messages.length > previousMessageCount) unreadCount += messages.length - previousMessageCount;
+        } else {
+          unreadCount = 0;
+        }
+        previousMessageCount = messages.length;
+        renderUnread();
         list.innerHTML = "";
         if (!messages.length) {
           list.innerHTML = `<p style="margin:auto;color:#9e7060">${t("empty")}</p>`;
@@ -136,7 +310,9 @@
   }
 
   const observer = new MutationObserver(() => setTimeout(scan, 20));
+  installStyles();
   document.addEventListener("DOMContentLoaded", () => {
+    installStyles();
     scan();
     observer.observe(document.body, { childList: true, subtree: true });
   });
