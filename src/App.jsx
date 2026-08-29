@@ -18,7 +18,7 @@ let _firebaseApp = null, _db = null, _storage = null, _firebaseReady = false;
 async function initFirebase() {
   if (!isRealConfig || _firebaseReady) return _firebaseReady;
   try {
-    const [{ initializeApp }, { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, increment }, { getStorage, ref, uploadString, getDownloadURL }] =
+    const [{ initializeApp }, { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp }, { getStorage, ref, uploadString, getDownloadURL }] =
       await Promise.all([
         import("https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"),
         import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"),
@@ -27,7 +27,7 @@ async function initFirebase() {
     _firebaseApp = initializeApp(FIREBASE_CONFIG);
     _db = getFirestore(_firebaseApp);
     _storage = getStorage(_firebaseApp);
-    window.__fb = { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, increment, ref, uploadString, getDownloadURL };
+    window.__fb = { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, ref, uploadString, getDownloadURL };
     _firebaseReady = true;
     return true;
   } catch (e) { console.error("Firebase:", e); return false; }
@@ -49,6 +49,10 @@ function makeUniqueId(prefix = "id") {
   const value = globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`;
   return `${prefix}_${value}`;
 }
+function getLikeCount(value) {
+  const count = Number(value);
+  return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+}
 let mockEvent = {
   id: "mariage-2025", name: "Marie & Thomas", date: "21 Juin 2025", slug: "marie-thomas-2025",
   moderationMode: "immediate", displayMode: "mixed", active: true,
@@ -64,7 +68,7 @@ const MockDB = {
   },
   updatePhoto: (id, u) => { mockPhotos = mockPhotos.map(p => p.id === id ? { ...p, ...u } : p); mockListeners.forEach(cb => cb([...mockPhotos])); },
   deletePhoto: (id) => { mockPhotos = mockPhotos.filter(p => p.id !== id); mockListeners.forEach(cb => cb([...mockPhotos])); },
-  likePhoto: (id) => { mockPhotos = mockPhotos.map(p => p.id === id ? { ...p, likes: (p.likes || 0) + 1 } : p); mockListeners.forEach(cb => cb([...mockPhotos])); },
+  likePhoto: (id) => { mockPhotos = mockPhotos.map(p => p.id === id ? { ...p, likes: getLikeCount(p.likes) + 1 } : p); mockListeners.forEach(cb => cb([...mockPhotos])); },
   onPhotos: (cb) => { mockListeners.push(cb); cb([...mockPhotos]); return () => { mockListeners = mockListeners.filter(l => l !== cb); }; },
   getEvent: () => ({ ...mockEvent }),
   updateEvent: (u) => { mockEvent = { ...mockEvent, ...u }; },
@@ -90,13 +94,40 @@ const DB = {
   },
   likePhoto: async (id) => {
     if (!_firebaseReady) return MockDB.likePhoto(id);
-    const { doc, updateDoc, increment } = window.__fb; await updateDoc(doc(_db, "photos", id), { likes: increment(1) });
+    const { collection, addDoc, serverTimestamp } = window.__fb;
+    await addDoc(collection(_db, "photos"), {
+      type: "photoLike",
+      photoId: id,
+      eventId: "mariage-2026",
+      status: "like",
+      likes: 0,
+      createdAt: serverTimestamp(),
+    });
   },
   onPhotos: (cb) => {
     if (!_firebaseReady) return MockDB.onPhotos(cb);
     const { collection, query, orderBy, onSnapshot } = window.__fb;
     const q = query(collection(_db, "photos"), orderBy("createdAt", "desc"));
-    return onSnapshot(q, snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString() }))));
+    return onSnapshot(q, snap => {
+      const records = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+        };
+      });
+      const likesByPhoto = records.reduce((totals, record) => {
+        if (record.type === "photoLike" && record.photoId) {
+          totals.set(record.photoId, (totals.get(record.photoId) || 0) + 1);
+        }
+        return totals;
+      }, new Map());
+      cb(records.filter(record => record.type !== "photoLike").map(data => ({
+        ...data,
+        likes: getLikeCount(data.likes) + (likesByPhoto.get(data.id) || 0),
+      })));
+    });
   },
   getEvent: () => MockDB.getEvent(),
   updateEvent: (u) => MockDB.updateEvent(u),
@@ -619,28 +650,53 @@ function UploadPage({ setView }) {
 // ============================================================
 function GalleryPage({ setView }) {
   const [photos, setPhotos] = useState([]);
-  const [liked, setLiked] = useState(() => { try { return JSON.parse(localStorage.getItem("wl") || "{}"); } catch { return {}; } });
+  const [liked, setLiked] = useState(() => { try { return JSON.parse(localStorage.getItem("wedding-photo-likes-v2") || "{}"); } catch { return {}; } });
+  const [likeError, setLikeError] = useState("");
   const [lightbox, setLightbox] = useState(null);
   const [sort, setSort] = useState("recent"); // recent | popular
+  const pendingLikes = useRef(new Set());
   const event = DB.getEvent();
 
   useEffect(() => DB.onPhotos(all => setPhotos(all.filter(p => p.status === "approved"))), []);
+  useEffect(() => {
+    setLightbox(current => current ? (photos.find(photo => photo.id === current.id) || current) : null);
+  }, [photos]);
 
   const handleLike = async (photo) => {
-    if (liked[photo.id]) return;
-    const nl = { ...liked, [photo.id]: true };
-    setLiked(nl);
-    try { localStorage.setItem("wl", JSON.stringify(nl)); } catch {}
-    await DB.likePhoto(photo.id);
+    if (liked[photo.id] || pendingLikes.current.has(photo.id)) return;
+    pendingLikes.current.add(photo.id);
+    setLikeError("");
+    setLiked(current => {
+      const next = { ...current, [photo.id]: true };
+      try { localStorage.setItem("wedding-photo-likes-v2", JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setPhotos(current => current.map(item => item.id === photo.id ? { ...item, likes: getLikeCount(item.likes) + 1 } : item));
+
+    try {
+      await DB.likePhoto(photo.id);
+    } catch (error) {
+      console.error("Like photo:", error);
+      setPhotos(current => current.map(item => item.id === photo.id ? { ...item, likes: Math.max(0, getLikeCount(item.likes) - 1) } : item));
+      setLiked(current => {
+        const next = { ...current };
+        delete next[photo.id];
+        try { localStorage.setItem("wedding-photo-likes-v2", JSON.stringify(next)); } catch {}
+        return next;
+      });
+      setLikeError("Le like n'a pas pu être enregistré. Vérifie ta connexion puis réessaie.");
+    } finally {
+      pendingLikes.current.delete(photo.id);
+    }
   };
 
   const sorted = useMemo(() => {
     const arr = [...photos];
-    if (sort === "popular") return arr.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+    if (sort === "popular") return arr.sort((a, b) => getLikeCount(b.likes) - getLikeCount(a.likes) || new Date(b.createdAt) - new Date(a.createdAt));
     return arr.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [photos, sort]);
 
-  const topLiked = [...photos].sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
+  const topLiked = [...photos].sort((a, b) => getLikeCount(b.likes) - getLikeCount(a.likes) || new Date(b.createdAt) - new Date(a.createdAt))[0];
   const latest = [...photos].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
 
   return (
@@ -669,6 +725,7 @@ function GalleryPage({ setView }) {
           }}>{l}</button>
         ))}
       </div>
+      {likeError && <div style={{ margin: "10px 14px 0", padding: "9px 12px", borderRadius: 10, background: "#fde8e6", color: "#a93226", fontSize: ".8rem" }}>{likeError}</div>}
 
       {/* Mise en avant : dernière photo + la plus likée */}
       {(latest || topLiked) && photos.length > 0 && (
@@ -692,19 +749,19 @@ function GalleryPage({ setView }) {
                   backdropFilter: "blur(8px)", display: "flex", alignItems: "center", gap: 4,
                   animation: liked[latest.id] ? "heartPop .4s ease" : "none",
                 }}>
-                  {liked[latest.id] ? "❤️" : "🤍"} {(latest.likes || 0) + (liked[latest.id] ? 1 : 0)}
+                  {liked[latest.id] ? "❤️" : "🤍"} {getLikeCount(latest.likes)}
                 </button>
               </div>
             )}
 
             {/* Photo la plus likée */}
-            {topLiked && (topLiked.likes || 0) > 0 && topLiked.id !== latest?.id && (
+            {topLiked && getLikeCount(topLiked.likes) > 0 && topLiked.id !== latest?.id && (
               <div style={{ flex: 1, borderRadius: 16, overflow: "hidden", position: "relative", cursor: "pointer", boxShadow: "0 3px 16px var(--shadow)" }}
                 onClick={() => setLightbox(topLiked)}>
                 <img src={topLiked.url} alt="" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(0deg,rgba(0,0,0,.6) 0%,transparent 55%)" }} />
                 <span style={{ position: "absolute", top: 9, left: 9, background: "rgba(180,40,40,.85)", color: "white", borderRadius: 50, padding: "3px 11px", fontSize: ".7rem" }}>
-                  ❤️ {topLiked.likes} likes
+                  ❤️ {getLikeCount(topLiked.likes)} likes
                 </span>
                 {topLiked.author && <p style={{ position: "absolute", bottom: 9, left: 11, color: "white", fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontStyle: "italic" }}>{topLiked.author}</p>}
                 <button onClick={e => { e.stopPropagation(); handleLike(topLiked); }} style={{
@@ -714,7 +771,7 @@ function GalleryPage({ setView }) {
                   backdropFilter: "blur(8px)", display: "flex", alignItems: "center", gap: 4,
                   animation: liked[topLiked.id] ? "heartPop .4s ease" : "none",
                 }}>
-                  {liked[topLiked.id] ? "❤️" : "🤍"} {(topLiked.likes || 0) + (liked[topLiked.id] ? 1 : 0)}
+                  {liked[topLiked.id] ? "❤️" : "🤍"} {getLikeCount(topLiked.likes)}
                 </button>
               </div>
             )}
@@ -734,7 +791,7 @@ function GalleryPage({ setView }) {
       {sorted.length > 0 && (
         <div style={{ columnCount: "auto", columnWidth: 260, columnGap: 8, padding: "12px 8px" }}>
           {sorted.map((photo, i) => {
-            const isTop = photo.id === topLiked?.id && (topLiked?.likes || 0) > 0;
+            const isTop = photo.id === topLiked?.id && getLikeCount(topLiked?.likes) > 0;
             return (
               <div key={photo.id} className="photo-in" style={{
                 breakInside: "avoid", marginBottom: 8, borderRadius: 14, overflow: "hidden",
@@ -762,7 +819,7 @@ function GalleryPage({ setView }) {
                     cursor: liked[photo.id] ? "default" : "pointer", flexShrink: 0,
                     animation: liked[photo.id] ? "heartPop .4s ease" : "none",
                   }}>
-                    {liked[photo.id] ? "❤️" : "🤍"} {(photo.likes || 0) + (liked[photo.id] ? 1 : 0)}
+                    {liked[photo.id] ? "❤️" : "🤍"} {getLikeCount(photo.likes)}
                   </button>
                 </div>
               </div>
@@ -789,7 +846,7 @@ function GalleryPage({ setView }) {
                 fontSize: ".9rem", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", gap: 6,
                 animation: liked[lightbox.id] ? "heartPop .4s ease" : "none",
               }}>
-                {liked[lightbox.id] ? "❤️" : "🤍"} {(lightbox.likes || 0) + (liked[lightbox.id] ? 1 : 0)}
+                {liked[lightbox.id] ? "❤️" : "🤍"} {getLikeCount(lightbox.likes)}
               </button>
             </div>
           </div>
@@ -963,10 +1020,48 @@ function LiveTV({ setView }) {
 }
 
 function WallMode({ photos }) {
+  const containerRef = useRef(null);
+  const [capacity, setCapacity] = useState(12);
+  const [rotation, setRotation] = useState(0);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const updateCapacity = () => {
+      const { width, height } = container.getBoundingClientRect();
+      const columns = Math.max(1, Math.floor((width + 3) / 253));
+      const rows = Math.max(1, Math.floor((height + 3) / 253));
+      setCapacity(columns * rows);
+    };
+    updateCapacity();
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(updateCapacity);
+      observer.observe(container);
+      return () => observer.disconnect();
+    }
+    window.addEventListener("resize", updateCapacity);
+    return () => window.removeEventListener("resize", updateCapacity);
+  }, []);
+
+  useEffect(() => { setRotation(0); }, [photos.length, capacity]);
+  useEffect(() => {
+    if (photos.length <= 1) return;
+    const interval = setInterval(() => setRotation(current => current + 1), 7000);
+    return () => clearInterval(interval);
+  }, [photos.length]);
+
+  const visiblePhotos = useMemo(() => {
+    if (!photos.length) return [];
+    const visibleCount = Math.min(capacity, photos.length);
+    const step = photos.length > capacity ? capacity : Math.max(1, Math.ceil(photos.length / 3));
+    const start = (rotation * step) % photos.length;
+    return Array.from({ length: visibleCount }, (_, index) => photos[(start + index) % photos.length]);
+  }, [photos, capacity, rotation]);
+
   return (
-    <div style={{ width: "100%", height: "100%", overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gridAutoRows: "250px", gap: 3, padding: 3, alignContent: "start" }}>
-      {photos.map((p, i) => (
-        <div key={p.id} className="photo-in" style={{ animationDelay: `${Math.min(i * 0.05, 0.6)}s`, position: "relative", borderRadius: 8, overflow: "hidden", background: "#111" }}>
+    <div ref={containerRef} style={{ width: "100%", height: "100%", overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gridAutoRows: "250px", gap: 3, padding: 3, alignContent: "start" }}>
+      {visiblePhotos.map((p, i) => (
+        <div key={`${p.id}-${rotation}`} className="photo-in" style={{ animationDelay: `${Math.min(i * 0.04, 0.45)}s`, position: "relative", borderRadius: 8, overflow: "hidden", background: "#111" }}>
           <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "1rem .75rem .5rem", background: "linear-gradient(0deg,rgba(0,0,0,.72),transparent)" }}>
             {p.author && <span style={{ color: "rgba(255,255,255,.9)", fontSize: ".85rem", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic" }}>{p.author}</span>}
@@ -1205,8 +1300,11 @@ function AdminPhotos({ photos, onUpdate, onDelete }) {
 
 function AdminStats({ photos }) {
   const approved = photos.filter(p => p.status === "approved");
-  const totalLikes = photos.reduce((s, p) => s + (p.likes || 0), 0);
-  const topLiked = [...photos].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 3);
+  const totalLikes = photos.reduce((sum, photo) => sum + getLikeCount(photo.likes), 0);
+  const topLiked = [...photos]
+    .filter(photo => getLikeCount(photo.likes) > 0)
+    .sort((a, b) => getLikeCount(b.likes) - getLikeCount(a.likes) || new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 3);
   const byHour = useMemo(() => { const m = {}; photos.forEach(p => { const h = new Date(p.createdAt).getHours(); m[h] = (m[h] || 0) + 1; }); return m; }, [photos]);
   const maxH = Math.max(...Object.values(byHour), 1);
 
@@ -1240,20 +1338,20 @@ function AdminStats({ photos }) {
         )}
       </div>
 
-      {topLiked[0]?.likes > 0 && (
-        <div style={{ background: "var(--white)", borderRadius: 16, padding: "1.4rem", boxShadow: "0 2px 10px var(--shadow)" }}>
-          <h3 style={{ fontFamily: "'Cormorant Garamond',serif", color: "var(--burgundy)", marginBottom: 12, fontSize: "1.25rem" }}>❤️ Photos les plus aimées</h3>
+      <div style={{ background: "var(--white)", borderRadius: 16, padding: "1.4rem", boxShadow: "0 2px 10px var(--shadow)" }}>
+        <h3 style={{ fontFamily: "'Cormorant Garamond',serif", color: "var(--burgundy)", marginBottom: 12, fontSize: "1.25rem" }}>❤️ Photos les plus aimées</h3>
+        {topLiked.length > 0 ? (
           <div style={{ display: "flex", gap: 10 }}>
-            {topLiked.filter(p => p.likes > 0).map((p, i) => (
+            {topLiked.map((p, i) => (
               <div key={p.id} style={{ position: "relative", width: 90, height: 90, borderRadius: 12, overflow: "hidden" }}>
                 <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                <div style={{ position: "absolute", bottom: 3, right: 3, background: "rgba(0,0,0,.6)", color: "white", padding: "1px 6px", borderRadius: 50, fontSize: ".65rem", backdropFilter: "blur(4px)" }}>❤️ {p.likes}</div>
+                <div style={{ position: "absolute", bottom: 3, right: 3, background: "rgba(0,0,0,.6)", color: "white", padding: "1px 6px", borderRadius: 50, fontSize: ".65rem", backdropFilter: "blur(4px)" }}>❤️ {getLikeCount(p.likes)}</div>
                 {i === 0 && <div style={{ position: "absolute", top: 3, left: 3, fontSize: ".85rem" }}>🥇</div>}
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : <p style={{ color: "var(--muted)", fontSize: ".85rem" }}>Aucun like enregistré pour le moment.</p>}
+      </div>
     </div>
   );
 }
