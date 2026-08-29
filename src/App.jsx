@@ -45,6 +45,10 @@ let mockPhotos = [
   { id: "d6", url: "https://picsum.photos/seed/wed6/900/700", author: "Emma", message: "", status: "pending", createdAt: new Date(Date.now() - 60000).toISOString(), likes: 0 },
 ];
 let mockListeners = [];
+function makeUniqueId(prefix = "id") {
+  const value = globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return `${prefix}_${value}`;
+}
 let mockEvent = {
   id: "mariage-2025", name: "Marie & Thomas", date: "21 Juin 2025", slug: "marie-thomas-2025",
   moderationMode: "immediate", displayMode: "mixed", active: true,
@@ -53,7 +57,7 @@ let mockEvent = {
 
 const MockDB = {
   addPhoto: (p) => {
-    const n = { ...p, id: `p_${Date.now()}`, createdAt: new Date().toISOString(), status: mockEvent.moderationMode === "moderated" ? "pending" : "approved", likes: 0 };
+    const n = { ...p, id: makeUniqueId("p"), createdAt: new Date().toISOString(), status: mockEvent.moderationMode === "moderated" ? "pending" : "approved", likes: 0 };
     mockPhotos = [n, ...mockPhotos];
     mockListeners.forEach(cb => cb([...mockPhotos]));
     return n;
@@ -70,7 +74,7 @@ const DB = {
   addPhoto: async (p) => {
     if (!_firebaseReady) return MockDB.addPhoto(p);
     const { collection, addDoc, serverTimestamp, ref, uploadString, getDownloadURL } = window.__fb;
-    const sRef = ref(_storage, `events/${p.eventId}/photos/${Date.now()}.jpg`);
+    const sRef = ref(_storage, `events/${p.eventId}/photos/${makeUniqueId("photo")}.jpg`);
     await uploadString(sRef, p.url, "data_url");
     const url = await getDownloadURL(sRef);
     const d = await addDoc(collection(_db, "photos"), { ...p, url, thumbnail: url, status: mockEvent.moderationMode === "moderated" ? "pending" : "approved", likes: 0, createdAt: serverTimestamp() });
@@ -102,14 +106,22 @@ const DB = {
 // HELPERS
 // ============================================================
 const compressImage = (file, maxWidth = 1400, quality = 0.85) =>
-  new Promise(resolve => {
+  new Promise((resolve, reject) => {
     const img = new Image(), url = URL.createObjectURL(file);
     img.onload = () => {
       const canvas = document.createElement("canvas"), r = Math.min(1, maxWidth / img.width);
       canvas.width = img.width * r; canvas.height = img.height * r;
       canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(blob => { URL.revokeObjectURL(url); const fr = new FileReader(); fr.onloadend = () => resolve(fr.result); fr.readAsDataURL(blob); }, "image/jpeg", quality);
+      canvas.toBlob(blob => {
+        URL.revokeObjectURL(url);
+        if (!blob) { reject(new Error("Compression impossible")); return; }
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = () => reject(new Error("Lecture impossible"));
+        fr.readAsDataURL(blob);
+      }, "image/jpeg", quality);
     };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Format d'image non pris en charge")); };
     img.src = url;
   });
 
@@ -373,32 +385,127 @@ function HomePage({ setView }) {
 // ============================================================
 function UploadPage({ setView }) {
   const [step, setStep] = useState("idle");
-  const [preview, setPreview] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [firstName, setFirstName] = useState("");
   const [message, setMessage] = useState("");
   const [progress, setProgress] = useState(0);
+  const [uploadedCount, setUploadedCount] = useState(0);
   const [error, setError] = useState(null);
   const fileRef = useRef();
+  const selectedFilesRef = useRef([]);
   const event = DB.getEvent();
 
-  const handleFile = useCallback(async (file) => {
-    if (!file?.type.startsWith("image/")) return;
-    setStep("compressing");
-    try { const c = await compressImage(file); setPreview(c); setStep("preview"); }
-    catch { setError("Erreur lecture image"); setStep("idle"); }
+  useEffect(() => { selectedFilesRef.current = selectedFiles; }, [selectedFiles]);
+  useEffect(() => () => {
+    selectedFilesRef.current.forEach(item => URL.revokeObjectURL(item.previewUrl));
+  }, []);
+
+  const handleFiles = useCallback((files) => {
+    const allFiles = Array.from(files || []);
+    const images = allFiles.filter(file => file.type.startsWith("image/"));
+    if (!images.length) {
+      setError("Sélectionne au moins une image.");
+      return;
+    }
+
+    const candidates = images.map(file => ({
+      id: makeUniqueId("selection"),
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+
+    setSelectedFiles(current => {
+      const known = new Set(current.map(item => `${item.file.name}:${item.file.size}:${item.file.lastModified}`));
+      const unique = candidates.filter(item => {
+        const key = `${item.file.name}:${item.file.size}:${item.file.lastModified}`;
+        if (known.has(key)) {
+          URL.revokeObjectURL(item.previewUrl);
+          return false;
+        }
+        known.add(key);
+        return true;
+      });
+      return [...current, ...unique];
+    });
+
+    setError(images.length < allFiles.length ? "Les fichiers qui ne sont pas des images ont été ignorés." : null);
+    setStep("preview");
   }, []);
 
   const upload = async () => {
-    if (!preview) return;
-    setStep("uploading"); setError(null);
-    const t = setInterval(() => setProgress(p => Math.min(p + 7, 88)), 110);
-    try {
-      await DB.addPhoto({ url: preview, thumbnail: preview, author: firstName.trim() || null, message: message.trim() || null, eventId: event.id });
-      clearInterval(t); setProgress(100); setTimeout(() => setStep("success"), 250);
-    } catch { clearInterval(t); setError("Erreur d'envoi, réessaie !"); setStep("preview"); }
+    if (!selectedFiles.length) return;
+    setStep("uploading");
+    setError(null);
+    setProgress(0);
+    setUploadedCount(0);
+
+    const uploaded = [];
+    const failed = [];
+    for (let index = 0; index < selectedFiles.length; index++) {
+      const item = selectedFiles[index];
+      try {
+        const compressed = await compressImage(item.file);
+        await DB.addPhoto({
+          url: compressed,
+          thumbnail: compressed,
+          author: firstName.trim() || null,
+          message: message.trim() || null,
+          eventId: event.id,
+        });
+        uploaded.push(item);
+        setUploadedCount(uploaded.length);
+      } catch {
+        failed.push(item);
+      }
+      setProgress(Math.round(((index + 1) / selectedFiles.length) * 100));
+    }
+
+    if (failed.length === 0) {
+      setTimeout(() => setStep("success"), 250);
+      return;
+    }
+
+    uploaded.forEach(item => URL.revokeObjectURL(item.previewUrl));
+    setSelectedFiles(failed);
+    setProgress(0);
+    setError(
+      uploaded.length
+        ? `${uploaded.length} photo${uploaded.length > 1 ? "s ont" : " a"} été envoyée${uploaded.length > 1 ? "s" : ""}. ${failed.length} reste${failed.length > 1 ? "nt" : ""} à réessayer.`
+        : "L'envoi a échoué. Vérifie ta connexion puis réessaie."
+    );
+    setStep("preview");
   };
 
-  const reset = () => { setStep("idle"); setPreview(null); setFirstName(""); setMessage(""); setProgress(0); setError(null); };
+  const removeFile = (id) => {
+    setSelectedFiles(current => {
+      const removed = current.find(item => item.id === id);
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      const next = current.filter(item => item.id !== id);
+      if (!next.length) setStep("idle");
+      return next;
+    });
+  };
+
+  const openPicker = (camera = false) => {
+    const input = fileRef.current;
+    if (!input) return;
+    input.value = "";
+    input.multiple = !camera;
+    if (camera) input.setAttribute("capture", "environment");
+    else input.removeAttribute("capture");
+    input.click();
+  };
+
+  const reset = () => {
+    selectedFiles.forEach(item => URL.revokeObjectURL(item.previewUrl));
+    setStep("idle");
+    setSelectedFiles([]);
+    setFirstName("");
+    setMessage("");
+    setProgress(0);
+    setUploadedCount(0);
+    setError(null);
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(160deg, #fdf8f4, #f5ddd4)", display: "flex", flexDirection: "column", alignItems: "center", padding: "2rem 1rem" }}>
@@ -409,20 +516,28 @@ function UploadPage({ setView }) {
       </div>
 
       <div style={{ width: "100%", maxWidth: 460 }}>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          style={{ display: "none" }}
+          onChange={e => handleFiles(e.target.files)}
+        />
 
         {step === "success" && (
           <div className="fade-up" style={{ background: "var(--white)", borderRadius: 24, padding: "2.5rem 2rem", textAlign: "center", boxShadow: "0 8px 40px var(--shadow)" }}>
             <div style={{ fontSize: 56, marginBottom: 14, animation: "heartPop .6s ease 2" }}>💖</div>
             <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.9rem", color: "var(--burgundy)", marginBottom: 8 }}>Merci !</h2>
             <p style={{ color: "var(--muted)", marginBottom: 20, fontSize: ".9rem" }}>
-              {event.moderationMode === "moderated" ? "Votre photo sera visible après validation." : "Votre photo est maintenant en ligne !"}
+              {uploadedCount} photo{uploadedCount > 1 ? "s" : ""} envoyée{uploadedCount > 1 ? "s" : ""}. {event.moderationMode === "moderated" ? (uploadedCount > 1 ? "Elles seront visibles après validation." : "Elle sera visible après validation.") : (uploadedCount > 1 ? "Elles sont maintenant en ligne !" : "Elle est maintenant en ligne !")}
             </p>
             <div style={{ width: 110, height: 110, margin: "0 auto 20px", borderRadius: 14, overflow: "hidden", boxShadow: "0 4px 18px var(--shadow)" }}>
-              <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <img src={selectedFiles[0]?.previewUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
               <button onClick={reset} className="btn" style={{ background: "var(--rose)", color: "white", padding: "12px 22px", borderRadius: 50, fontSize: ".95rem", fontWeight: 500 }}>
-                📸 Autre photo
+                📸 Ajouter d'autres photos
               </button>
               <button onClick={() => setView(VIEWS.GALLERY)} className="btn" style={{ background: "var(--white)", border: "1.5px solid var(--blush)", color: "var(--muted)", padding: "12px 22px", borderRadius: 50, fontSize: ".95rem" }}>
                 🖼️ Voir la galerie
@@ -431,17 +546,11 @@ function UploadPage({ setView }) {
           </div>
         )}
 
-        {step === "compressing" && (
-          <div style={{ textAlign: "center", padding: "3rem", color: "var(--muted)" }}>
-            <div style={{ fontSize: 40, animation: "spin 1s linear infinite", display: "inline-block", marginBottom: 12 }}>🔄</div>
-            <p>Compression…</p>
-          </div>
-        )}
-
         {step === "uploading" && (
           <div className="fade-up" style={{ background: "var(--white)", borderRadius: 24, padding: "2.5rem 2rem", textAlign: "center", boxShadow: "0 8px 40px var(--shadow)" }}>
             <div style={{ fontSize: 38, marginBottom: 14, animation: "spin 1s linear infinite", display: "inline-block" }}>📡</div>
-            <p style={{ color: "var(--text)", marginBottom: 20 }}>Envoi en cours…</p>
+            <p style={{ color: "var(--text)", marginBottom: 6 }}>Envoi de {selectedFiles.length} photo{selectedFiles.length > 1 ? "s" : ""}…</p>
+            <p style={{ color: "var(--muted)", fontSize: ".78rem", marginBottom: 20 }}>{Math.min(uploadedCount + 1, selectedFiles.length)} sur {selectedFiles.length}</p>
             <div style={{ background: "var(--blush)", borderRadius: 50, height: 10, overflow: "hidden" }}>
               <div style={{ height: "100%", borderRadius: 50, background: "linear-gradient(90deg, var(--rose), var(--gold))", width: `${progress}%`, transition: "width .15s ease" }} />
             </div>
@@ -451,18 +560,32 @@ function UploadPage({ setView }) {
 
         {step === "preview" && (
           <div className="fade-up" style={{ background: "var(--white)", borderRadius: 24, overflow: "hidden", boxShadow: "0 8px 40px var(--shadow)" }}>
-            <div style={{ position: "relative", aspectRatio: "4/3", background: "#1a1008" }}>
-              <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-              <button onClick={reset} style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,.5)", color: "white", borderRadius: 50, width: 34, height: 34, fontSize: "1.1rem", backdropFilter: "blur(8px)" }}>✕</button>
+            <div style={{ padding: "1rem 1rem .25rem", background: "#1a1008" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ color: "white", fontSize: ".88rem" }}>{selectedFiles.length} photo{selectedFiles.length > 1 ? "s sélectionnées" : " sélectionnée"}</span>
+                <button onClick={reset} style={{ background: "rgba(255,255,255,.15)", color: "white", borderRadius: 50, width: 32, height: 32, fontSize: "1rem", backdropFilter: "blur(8px)" }} title="Tout retirer">✕</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(86px,1fr))", gap: 8, maxHeight: 330, overflowY: "auto", paddingBottom: 12 }}>
+                {selectedFiles.map((item, index) => (
+                  <div key={item.id} style={{ position: "relative", aspectRatio: "1", borderRadius: 10, overflow: "hidden", background: "#2b211b" }}>
+                    <img src={item.previewUrl} alt={`Photo ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    <button onClick={() => removeFile(item.id)} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,.65)", color: "white", borderRadius: 50, width: 24, height: 24, fontSize: ".75rem", backdropFilter: "blur(6px)" }} aria-label={`Retirer la photo ${index + 1}`}>✕</button>
+                  </div>
+                ))}
+              </div>
             </div>
             <div style={{ padding: "1.25rem" }}>
               {error && <p style={{ color: "#c0392b", fontSize: ".82rem", marginBottom: 10 }}>{error}</p>}
+              <button onClick={() => openPicker(false)} className="btn" style={{ width: "100%", padding: "10px", borderRadius: 50, marginBottom: 12, background: "var(--cream)", border: "1.5px dashed var(--rose)", color: "var(--burgundy)", fontSize: ".86rem" }}>
+                ＋ Ajouter d'autres photos
+              </button>
               <input placeholder="Votre prénom (optionnel)" value={firstName} onChange={e => setFirstName(e.target.value)}
                 style={{ width: "100%", padding: "11px 14px", borderRadius: 11, marginBottom: 10, border: "1.5px solid var(--blush)", background: "var(--cream)", fontSize: ".93rem" }} />
               <textarea placeholder="Un message pour les mariés… (optionnel)" value={message} onChange={e => setMessage(e.target.value)} rows={2}
-                style={{ width: "100%", padding: "11px 14px", borderRadius: 11, marginBottom: 14, border: "1.5px solid var(--blush)", background: "var(--cream)", fontSize: ".93rem", resize: "none" }} />
+                style={{ width: "100%", padding: "11px 14px", borderRadius: 11, marginBottom: 7, border: "1.5px solid var(--blush)", background: "var(--cream)", fontSize: ".93rem", resize: "none" }} />
+              {selectedFiles.length > 1 && <p style={{ color: "var(--muted)", fontSize: ".72rem", marginBottom: 14 }}>Le prénom et le message seront appliqués aux {selectedFiles.length} photos.</p>}
               <button onClick={upload} className="btn" style={{ width: "100%", padding: "15px", borderRadius: 50, fontSize: "1rem", background: "linear-gradient(135deg, var(--rose), var(--burgundy))", color: "white", fontWeight: 500, boxShadow: "0 5px 22px rgba(92,42,30,.28)" }}>
-                ✨ Envoyer cette photo
+                ✨ Envoyer {selectedFiles.length > 1 ? `les ${selectedFiles.length} photos` : "cette photo"}
               </button>
             </div>
           </div>
@@ -470,17 +593,16 @@ function UploadPage({ setView }) {
 
         {step === "idle" && (
           <div className="fade-up">
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
-            <button onClick={() => { fileRef.current.setAttribute("capture", "environment"); fileRef.current.click(); }} className="btn"
+            <button onClick={() => openPicker(true)} className="btn"
               style={{ width: "100%", padding: "2rem", borderRadius: 22, marginBottom: 12, background: "linear-gradient(135deg, var(--rose), var(--burgundy))", color: "white", fontSize: "1.15rem", fontWeight: 500, boxShadow: "0 10px 30px rgba(92,42,30,.35)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 50 }}>📸</span>
               <span>Prendre une photo</span>
             </button>
-            <button onClick={() => { fileRef.current.removeAttribute("capture"); fileRef.current.click(); }} onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }} onDragOver={e => e.preventDefault()} className="btn"
+            <button onClick={() => openPicker(false)} onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files); }} onDragOver={e => e.preventDefault()} className="btn"
               style={{ width: "100%", padding: "1.4rem", borderRadius: 22, background: "var(--white)", border: "2px dashed var(--blush)", color: "var(--muted)", fontSize: ".97rem", display: "flex", flexDirection: "column", alignItems: "center", gap: 7 }}>
               <span style={{ fontSize: 32 }}>🖼️</span>
-              <span>Choisir depuis ma galerie</span>
-              <span style={{ fontSize: ".76rem", opacity: .6 }}>ou glisser-déposer</span>
+              <span>Choisir plusieurs photos</span>
+              <span style={{ fontSize: ".76rem", opacity: .6 }}>Sélection multiple · ou glisser-déposer</span>
             </button>
             <p style={{ textAlign: "center", color: "var(--muted)", fontSize: ".76rem", marginTop: 18, opacity: .65 }}>Compression automatique · Aucun compte requis</p>
           </div>
