@@ -106,8 +106,10 @@
         <button data-live-back type="button" style="border:0;background:#5c2a1e;color:white;border-radius:999px;padding:10px 17px;cursor:pointer">← ${t.back}</button>
         <strong style="position:absolute;left:50%;transform:translateX(-50%);font:400 22px 'Cormorant Garamond',Georgia,serif;color:#5c2a1e;white-space:nowrap">Huyen & Quentin · Live</strong>
       </header>
-      <div data-live-body style="position:relative;flex:1;display:flex;align-items:center;justify-content:center;background:#fdf8f4;min-height:0">
-        <div style="color:#9e7060">${t.loading}</div>
+      <div data-live-main style="position:relative;flex:1;display:flex;min-height:0;min-width:0;overflow:hidden">
+        <div data-live-body style="position:relative;flex:1;display:flex;align-items:center;justify-content:center;background:#fdf8f4;min-height:0;min-width:0">
+          <div style="color:#9e7060">${t.loading}</div>
+        </div>
       </div>`;
     Object.assign(panel.style, { position: "fixed", inset: "0", zIndex: "2147483646", display: "flex", flexDirection: "column", background: "#fdf8f4" });
     panel.querySelector("[data-live-back]").onclick = closePanel;
