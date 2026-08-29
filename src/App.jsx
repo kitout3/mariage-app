@@ -53,35 +53,11 @@ function getLikeCount(value) {
   const count = Number(value);
   return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
 }
-const DEFAULT_TV_SETTINGS = {
-  displayMode: "mixed",
-  mosaicMax: 200,
-  mosaicShape: "heart",
-  mosaicText: "Huyen + Quentin",
-};
-function normalizeTVSettings(value = {}) {
-  const requestedMax = Number(value.mosaicMax);
-  const mosaicMax = Number.isFinite(requestedMax)
-    ? Math.min(500, Math.max(10, Math.round(requestedMax / 5) * 5))
-    : DEFAULT_TV_SETTINGS.mosaicMax;
-  return {
-    displayMode: ["wall", "slideshow", "mixed", "mosaic"].includes(value.displayMode) ? value.displayMode : DEFAULT_TV_SETTINGS.displayMode,
-    mosaicMax,
-    mosaicShape: value.mosaicShape === "text" ? "text" : "heart",
-    mosaicText: String(value.mosaicText || DEFAULT_TV_SETTINGS.mosaicText).trim().slice(0, 40) || DEFAULT_TV_SETTINGS.mosaicText,
-  };
-}
-function getStoredTVSettings() {
-  try { return normalizeTVSettings(JSON.parse(localStorage.getItem("wedding-tv-settings-v1") || "{}")); }
-  catch { return { ...DEFAULT_TV_SETTINGS }; }
-}
 let mockEvent = {
   id: "mariage-2025", name: "Marie & Thomas", date: "21 Juin 2025", slug: "marie-thomas-2025",
   moderationMode: "immediate", displayMode: "mixed", active: true,
   adminPassword: "admin123", coverMessage: "Partagez vos plus beaux souvenirs",
-  ...DEFAULT_TV_SETTINGS,
 };
-let mockTVListeners = [];
 
 const MockDB = {
   addPhoto: (p) => {
@@ -96,17 +72,6 @@ const MockDB = {
   onPhotos: (cb) => { mockListeners.push(cb); cb([...mockPhotos]); return () => { mockListeners = mockListeners.filter(l => l !== cb); }; },
   getEvent: () => ({ ...mockEvent }),
   updateEvent: (u) => { mockEvent = { ...mockEvent, ...u }; },
-  saveTVSettings: (settings) => {
-    const normalized = normalizeTVSettings(settings);
-    mockEvent = { ...mockEvent, ...normalized };
-    try { localStorage.setItem("wedding-tv-settings-v1", JSON.stringify(normalized)); } catch {}
-    mockTVListeners.forEach(cb => cb(normalized));
-  },
-  onTVSettings: (cb) => {
-    mockTVListeners.push(cb);
-    cb(normalizeTVSettings({ ...mockEvent, ...getStoredTVSettings() }));
-    return () => { mockTVListeners = mockTVListeners.filter(listener => listener !== cb); };
-  },
 };
 
 const DB = {
@@ -166,34 +131,6 @@ const DB = {
   },
   getEvent: () => MockDB.getEvent(),
   updateEvent: (u) => MockDB.updateEvent(u),
-  saveTVSettings: async (settings) => {
-    const normalized = normalizeTVSettings(settings);
-    try { localStorage.setItem("wedding-tv-settings-v1", JSON.stringify(normalized)); } catch {}
-    if (!_firebaseReady) return MockDB.saveTVSettings(normalized);
-    const { collection, addDoc, serverTimestamp } = window.__fb;
-    await addDoc(collection(_db, "photos"), {
-      type: "tvSettings",
-      eventId: "mariage-2026",
-      status: "settings",
-      tv: normalized,
-      createdAt: serverTimestamp(),
-    });
-  },
-  onTVSettings: (cb) => {
-    if (!_firebaseReady) return MockDB.onTVSettings(cb);
-    const { collection, query, orderBy, onSnapshot } = window.__fb;
-    const q = query(collection(_db, "photos"), orderBy("createdAt", "desc"));
-    let lastSettingsId = null;
-    cb(getStoredTVSettings());
-    return onSnapshot(q, snap => {
-      const settingsDoc = snap.docs.find(item => item.data().type === "tvSettings");
-      if (!settingsDoc || settingsDoc.id === lastSettingsId) return;
-      lastSettingsId = settingsDoc.id;
-      const normalized = normalizeTVSettings(settingsDoc.data().tv);
-      try { localStorage.setItem("wedding-tv-settings-v1", JSON.stringify(normalized)); } catch {}
-      cb(normalized);
-    });
-  },
 };
 
 // ============================================================
@@ -945,74 +882,57 @@ function buildPlaylist(photos, boostFactor = 3) {
 
 const TV_ROTATION_MS = 9000;
 
-function finalizeMosaicSlots(candidates, maximum, columns, rows) {
-  const selected = Array.from({ length: Math.min(maximum, candidates.length) }, (_, index) =>
-    candidates[Math.floor((index * candidates.length) / Math.min(maximum, candidates.length))]
-  );
-  return selected.map(point => ({
-    x: 5 + ((point.column + 0.08) / columns) * 90,
-    y: 7 + ((point.row + 0.08) / rows) * 82,
-    width: (90 / columns) * 0.84,
-    height: (82 / rows) * 0.84,
-    order: Math.abs(Math.sin((point.column + 1) * 12.9898 + (point.row + 1) * 78.233)),
-  })).sort((a, b) => a.order - b.order);
-}
+function useExhaustivePhotoPage(photos, pageSize, intervalMs = TV_ROTATION_MS) {
+  const ids = useMemo(() => photos.map(photo => photo.id), [photos]);
+  const idsKey = ids.join("|");
+  const idsRef = useRef(ids);
+  const [cycle, setCycle] = useState(() => ({ remaining: ids, shown: [], pageToken: 0 }));
 
-function buildHeartSlots(maximum) {
-  let columns = Math.ceil(Math.sqrt(maximum * 2.2));
-  let rows = Math.ceil(columns * 0.86);
-  let candidates = [];
-  while (candidates.length < maximum) {
-    candidates = [];
-    for (let row = 0; row < rows; row++) {
-      for (let column = 0; column < columns; column++) {
-        const x = -1.32 + ((column + 0.5) / columns) * 2.64;
-        const y = 1.24 - ((row + 0.5) / rows) * 2.55;
-        const equation = Math.pow(x * x + y * y - 1, 3) - x * x * Math.pow(y, 3);
-        if (equation <= 0) candidates.push({ column, row });
+  useEffect(() => {
+    idsRef.current = ids;
+    setCycle(current => {
+      const validIds = new Set(ids);
+      const remaining = current.remaining.filter(id => validIds.has(id));
+      const shown = current.shown.filter(id => validIds.has(id));
+      const knownIds = new Set([...remaining, ...shown]);
+      const newIds = ids.filter(id => !knownIds.has(id));
+      const nextRemaining = [...remaining, ...newIds];
+      if (!nextRemaining.length && ids.length) {
+        return { remaining: [...ids], shown: [], pageToken: current.pageToken + 1 };
       }
-    }
-    if (candidates.length < maximum) { columns += 2; rows = Math.ceil(columns * 0.86); }
-  }
-  return finalizeMosaicSlots(candidates, maximum, columns, rows);
-}
+      return { ...current, remaining: nextRemaining, shown };
+    });
+  }, [idsKey]);
 
-function buildTextSlots(text, maximum) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1200; canvas.height = 360;
-  const context = canvas.getContext("2d");
-  if (!context) return buildHeartSlots(maximum);
-  let fontSize = 220;
-  context.textAlign = "center"; context.textBaseline = "middle";
-  do {
-    context.font = `700 ${fontSize}px 'Cormorant Garamond', Georgia, serif`;
-    if (context.measureText(text).width <= 1110) break;
-    fontSize -= 8;
-  } while (fontSize > 70);
-  context.fillStyle = "#fff";
-  context.fillText(text, canvas.width / 2, canvas.height / 2);
-  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-  let columns = Math.ceil(Math.sqrt(maximum * 12));
-  let rows = Math.max(5, Math.ceil(columns * 0.3));
-  let candidates = [];
-  while (candidates.length < maximum && columns < 160) {
-    candidates = [];
-    for (let row = 0; row < rows; row++) {
-      for (let column = 0; column < columns; column++) {
-        const px = Math.min(canvas.width - 1, Math.floor(((column + 0.5) / columns) * canvas.width));
-        const py = Math.min(canvas.height - 1, Math.floor(((row + 0.5) / rows) * canvas.height));
-        if (pixels[(py * canvas.width + px) * 4 + 3] > 80) candidates.push({ column, row });
-      }
-    }
-    if (candidates.length < maximum) { columns += 4; rows = Math.ceil(columns * 0.3); }
-  }
-  return candidates.length ? finalizeMosaicSlots(candidates, maximum, columns, rows) : buildHeartSlots(maximum);
+  useEffect(() => {
+    if (!ids.length || pageSize < 1) return;
+    const interval = setInterval(() => {
+      setCycle(current => {
+        const displayedIds = current.remaining.slice(0, pageSize);
+        const remaining = current.remaining.slice(pageSize);
+        if (!remaining.length) {
+          return { remaining: [...idsRef.current], shown: [], pageToken: current.pageToken + 1 };
+        }
+        return {
+          remaining,
+          shown: [...current.shown, ...displayedIds],
+          pageToken: current.pageToken + 1,
+        };
+      });
+    }, intervalMs);
+    return () => clearInterval(interval);
+  }, [idsKey, pageSize, intervalMs]);
+
+  const photoById = useMemo(() => new Map(photos.map(photo => [photo.id, photo])), [photos]);
+  return {
+    photos: cycle.remaining.slice(0, pageSize).map(id => photoById.get(id)).filter(Boolean),
+    pageToken: cycle.pageToken,
+  };
 }
 
 function LiveTV({ setView }) {
   const [photos, setPhotos] = useState([]);
-  const [tvSettings, setTVSettings] = useState(getStoredTVSettings);
-  const [mode, setMode] = useState(() => getStoredTVSettings().displayMode);
+  const [mode, setMode] = useState("mixed");
   const [slideIdx, setSlideIdx] = useState(0);
   const [playlist, setPlaylist] = useState([]);
   const [showControls, setShowControls] = useState(true);
@@ -1034,11 +954,6 @@ function LiveTV({ setView }) {
       setPlaylist(buildPlaylist(approved));
     });
   }, []);
-
-  useEffect(() => DB.onTVSettings(settings => {
-    setTVSettings(settings);
-    setMode(settings.displayMode);
-  }), []);
 
   // Avance dans la playlist (reconstruite périodiquement pour intégrer les nouveaux likes)
   useEffect(() => {
@@ -1078,7 +993,6 @@ function LiveTV({ setView }) {
       {mode === "wall"      && <WallMode      photos={photos} />}
       {mode === "slideshow" && <SlideshowMode photo={currentSlide} index={slideIdx} speed={speed} total={playlist.length} />}
       {mode === "mixed"     && <MixedMode     photos={photos} />}
-      {mode === "mosaic"    && <MosaicMode    photos={photos} settings={tvSettings} />}
 
       {/* Notification nouvelle photo */}
       {newPhoto && (
@@ -1123,13 +1037,13 @@ function LiveTV({ setView }) {
           display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end",
           maxWidth: "calc(100vw - 24px)",
         }}>
-          {["wall","slideshow","mixed","mosaic"].map(m => (
+          {["wall","slideshow","mixed"].map(m => (
             <button key={m} onClick={() => setMode(m)} style={{
               padding: "5px 16px", borderRadius: 50, fontSize: ".8rem", fontFamily: "'Jost',sans-serif",
               background: mode === m ? "rgba(255,255,255,.92)" : "rgba(255,255,255,.13)",
               color: mode === m ? "#1a1008" : "rgba(255,255,255,.8)",
               border: "none", transition: "all .2s", backdropFilter: "blur(10px)",
-            }}>{{ wall: "🧱 Mur", slideshow: "🎞 Diapo", mixed: "⊞ Mixte", mosaic: "♥ Mosaïque" }[m]}</button>
+            }}>{{ wall: "🧱 Mur", slideshow: "🎞 Diapo", mixed: "⊞ Mixte" }[m]}</button>
           ))}
           {mode === "slideshow" && (
             <select value={speed} onChange={e => setSpeed(+e.target.value)} style={{ background: "rgba(255,255,255,.13)", color: "white", border: "none", borderRadius: 50, padding: "5px 12px", fontSize: ".8rem", backdropFilter: "blur(10px)" }}>
@@ -1162,7 +1076,6 @@ function LiveTV({ setView }) {
 function WallMode({ photos }) {
   const containerRef = useRef(null);
   const [capacity, setCapacity] = useState(12);
-  const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -1183,25 +1096,12 @@ function WallMode({ photos }) {
     return () => window.removeEventListener("resize", updateCapacity);
   }, []);
 
-  useEffect(() => { setRotation(0); }, [photos.length, capacity]);
-  useEffect(() => {
-    if (photos.length <= 1) return;
-    const interval = setInterval(() => setRotation(current => current + 1), TV_ROTATION_MS);
-    return () => clearInterval(interval);
-  }, [photos.length]);
-
-  const visiblePhotos = useMemo(() => {
-    if (!photos.length) return [];
-    const visibleCount = Math.min(capacity, photos.length);
-    const step = photos.length > capacity ? capacity : Math.max(1, Math.ceil(photos.length / 3));
-    const start = (rotation * step) % photos.length;
-    return Array.from({ length: visibleCount }, (_, index) => photos[(start + index) % photos.length]);
-  }, [photos, capacity, rotation]);
+  const { photos: visiblePhotos, pageToken } = useExhaustivePhotoPage(photos, capacity);
 
   return (
     <div ref={containerRef} style={{ width: "100%", height: "100%", overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gridAutoRows: "250px", gap: 3, padding: 3, alignContent: "start" }}>
       {visiblePhotos.map((p, i) => (
-        <div key={`${p.id}-${rotation}`} className="photo-in" style={{ animationDelay: `${Math.min(i * 0.04, 0.45)}s`, position: "relative", borderRadius: 8, overflow: "hidden", background: "#111" }}>
+        <div key={`${p.id}-${pageToken}`} className="photo-in" style={{ animationDelay: `${Math.min(i * 0.04, 0.45)}s`, position: "relative", borderRadius: 8, overflow: "hidden", background: "#111" }}>
           <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "1rem .75rem .5rem", background: "linear-gradient(0deg,rgba(0,0,0,.72),transparent)" }}>
             {p.author && <span style={{ color: "rgba(255,255,255,.9)", fontSize: ".85rem", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic" }}>{p.author}</span>}
@@ -1247,27 +1147,13 @@ function SlideshowMode({ photo, index, speed, total }) {
 }
 
 function MixedMode({ photos }) {
-  // Photo "vedette" : alterne entre la dernière arrivée et la plus likée
-  const [featureToggle, setFeatureToggle] = useState(false);
-  const [rotation, setRotation] = useState(0);
-  const latest  = photos[0];
+  const { photos: visiblePhotos, pageToken } = useExhaustivePhotoPage(photos, 5);
+  const featured = visiblePhotos[0];
+  const visibleRest = visiblePhotos.slice(1);
+  const latest = photos[0];
   const topLiked = [...photos].sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
-  const featured = featureToggle && topLiked && (topLiked.likes || 0) > 0 ? topLiked : (latest || null);
-
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setFeatureToggle(t => !t);
-      setRotation(current => current + 1);
-    }, TV_ROTATION_MS);
-    return () => clearInterval(iv);
-  }, []);
-
-  const rest = photos.filter(p => p.id !== featured?.id);
-  const visibleRest = useMemo(() => {
-    if (!rest.length) return [];
-    const start = (rotation * 4) % rest.length;
-    return Array.from({ length: Math.min(4, rest.length) }, (_, index) => rest[(start + index) % rest.length]);
-  }, [rest, rotation]);
+  const isLatest = featured?.id === latest?.id;
+  const isTopLiked = featured?.id === topLiked?.id && (topLiked?.likes || 0) > 0;
 
   return (
     <div style={{ display: "flex", width: "100%", height: "100%", gap: 3, padding: 3 }}>
@@ -1276,19 +1162,19 @@ function MixedMode({ photos }) {
           <img key={featured.id} src={featured.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn .7s ease" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,.65) 0%, transparent 55%)" }} />
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "1.75rem" }}>
-            {featureToggle && (topLiked?.likes || 0) > 0
+            {isTopLiked
               ? <span style={{ background: "rgba(180,40,40,.85)", color: "white", borderRadius: 50, padding: "4px 14px", fontSize: ".78rem", display: "inline-block", marginBottom: 10 }}>❤️ Photo la plus aimée · {topLiked.likes} likes</span>
-              : <span style={{ background: "rgba(201,122,106,.85)", color: "white", borderRadius: 50, padding: "4px 14px", fontSize: ".78rem", display: "inline-block", marginBottom: 10 }}>✨ Dernière photo</span>
+              : <span style={{ background: "rgba(201,122,106,.85)", color: "white", borderRadius: 50, padding: "4px 14px", fontSize: ".78rem", display: "inline-block", marginBottom: 10 }}>{isLatest ? "✨ Dernière photo" : "📸 Souvenir des invités"}</span>
             }
             {featured.author && <p style={{ color: "white", fontFamily: "'Cormorant Garamond',serif", fontSize: "2rem", fontWeight: 300 }}>{featured.author}</p>}
             {featured.message && <p style={{ color: "rgba(255,255,255,.8)", fontSize: ".95rem", fontStyle: "italic", marginTop: 4 }}>"{featured.message}"</p>}
-            {(featured.likes || 0) > 0 && !featureToggle && <p style={{ color: "rgba(255,200,200,.75)", fontSize: ".82rem", marginTop: 6 }}>❤️ {featured.likes} réaction{featured.likes > 1 ? "s" : ""}</p>}
+            {(featured.likes || 0) > 0 && !isTopLiked && <p style={{ color: "rgba(255,200,200,.75)", fontSize: ".82rem", marginTop: 6 }}>❤️ {featured.likes} réaction{featured.likes > 1 ? "s" : ""}</p>}
           </div>
         </div>
       )}
       <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gridAutoRows: "calc(50% - 1.5px)", gap: 3, overflow: "hidden" }}>
         {visibleRest.map(p => (
-          <div key={`${p.id}-${rotation}`} style={{ borderRadius: 8, overflow: "hidden", position: "relative", animation: "fadeIn .7s ease" }}>
+          <div key={`${p.id}-${pageToken}`} style={{ borderRadius: 8, overflow: "hidden", position: "relative", animation: "fadeIn .7s ease" }}>
             <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             {(p.author || (p.likes || 0) > 0) && (
               <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: ".4rem .6rem", background: "linear-gradient(0deg,rgba(0,0,0,.65),transparent)", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
@@ -1298,52 +1184,6 @@ function MixedMode({ photos }) {
             )}
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function MosaicMode({ photos, settings }) {
-  const maximum = settings.mosaicMax;
-  const slots = useMemo(
-    () => settings.mosaicShape === "text" ? buildTextSlots(settings.mosaicText, maximum) : buildHeartSlots(maximum),
-    [settings.mosaicShape, settings.mosaicText, maximum]
-  );
-  const revealedPhotos = useMemo(() => [...photos]
-    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-    .slice(0, maximum), [photos, maximum]);
-  const revealed = Math.min(revealedPhotos.length, slots.length);
-  const progress = Math.min(100, Math.round((revealed / maximum) * 100));
-
-  return (
-    <div style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden", background: "radial-gradient(circle at 50% 42%, #3d2010 0%, #190d08 52%, #080403 100%)" }}>
-      <div style={{ position: "absolute", inset: "3.5% 2.5% 12%", filter: "drop-shadow(0 12px 35px rgba(0,0,0,.4))" }}>
-        {slots.map((slot, index) => {
-          const photo = revealedPhotos[index];
-          return (
-            <div key={`${Math.round(slot.x * 100)}-${Math.round(slot.y * 100)}`} style={{
-              position: "absolute", left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.width}%`, height: `${slot.height}%`,
-              borderRadius: maximum > 300 ? 2 : 4, overflow: "hidden",
-              background: photo ? "#25130d" : "rgba(245,221,212,.1)",
-              border: photo ? "1px solid rgba(255,255,255,.2)" : "1px solid rgba(245,221,212,.08)",
-              boxShadow: photo ? "0 2px 8px rgba(0,0,0,.35)" : "none",
-              transition: "background .7s ease, border-color .7s ease, transform .7s ease",
-              animation: photo ? "photoIn .7s cubic-bezier(.175,.885,.32,1.275) both" : "none",
-            }}>
-              {photo && <img src={photo.thumbnail || photo.url} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
-            </div>
-          );
-        })}
-      </div>
-
-      <div style={{ position: "absolute", left: "50%", bottom: 22, transform: "translateX(-50%)", minWidth: 240, maxWidth: "80vw", textAlign: "center", color: "white", fontFamily: "'Jost',sans-serif" }}>
-        <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(1rem,2.1vw,1.5rem)", marginBottom: 7, fontWeight: 300 }}>
-          {settings.mosaicShape === "heart" ? "Notre cœur se remplit de vos souvenirs" : settings.mosaicText}
-        </p>
-        <div style={{ height: 5, borderRadius: 50, overflow: "hidden", background: "rgba(255,255,255,.18)" }}>
-          <div style={{ width: `${progress}%`, height: "100%", borderRadius: 50, background: "linear-gradient(90deg,#c97a6a,#f5ddd4)", transition: "width .8s ease" }} />
-        </div>
-        <p style={{ marginTop: 5, fontSize: ".72rem", opacity: .72 }}>{revealed} / {maximum} photos · {progress}% révélé</p>
       </div>
     </div>
   );
@@ -1361,21 +1201,9 @@ function AdminPage({ auth, setAuth, setView }) {
   const [toast, showToast]      = useToast();
 
   useEffect(() => { if (!auth) return; return DB.onPhotos(setPhotos); }, [auth]);
-  useEffect(() => { if (!auth) return; return DB.onTVSettings(settings => setEvent(current => ({ ...current, ...settings }))); }, [auth]);
 
   const login = () => { if (password === event.adminPassword) { setAuth(true); setError(""); } else setError("Mot de passe incorrect"); };
-  const updateEvent = async u => {
-    try {
-      DB.updateEvent(u);
-      const tvSettings = normalizeTVSettings(u);
-      await DB.saveTVSettings(tvSettings);
-      setEvent({ ...DB.getEvent(), ...tvSettings });
-      showToast("Paramètres sauvegardés et synchronisés");
-    } catch (updateError) {
-      console.error("Paramètres TV:", updateError);
-      showToast("Impossible de synchroniser les paramètres TV", "error");
-    }
-  };
+  const updateEvent = u => { DB.updateEvent(u); setEvent(DB.getEvent()); showToast("Paramètres sauvegardés"); };
   const pending = photos.filter(p => p.status === "pending").length;
 
   if (!auth) return (
@@ -1431,7 +1259,7 @@ function AdminPage({ auth, setAuth, setView }) {
       <div style={{ padding: "1.25rem" }}>
         {tab === "photos"   && <AdminPhotos   photos={photos} onUpdate={async (id, u) => { await DB.updatePhoto(id, u); showToast("Photo mise à jour"); }} onDelete={async id => { await DB.deletePhoto(id); showToast("Supprimée"); }} />}
         {tab === "stats"    && <AdminStats    photos={photos} />}
-        {tab === "settings" && <AdminSettings event={event} photoCount={photos.filter(p => p.status === "approved").length} onUpdate={updateEvent} />}
+        {tab === "settings" && <AdminSettings event={event} onUpdate={updateEvent} />}
         {tab === "export"   && <AdminExport   photos={photos} event={event} />}
       </div>
 
@@ -1563,24 +1391,13 @@ function AdminStats({ photos }) {
   );
 }
 
-function AdminSettings({ event, photoCount, onUpdate }) {
+function AdminSettings({ event, onUpdate }) {
   const [name, setName] = useState(event.name);
   const [date, setDate] = useState(event.date);
   const [mm,   setMm]   = useState(event.moderationMode);
   const [dm,   setDm]   = useState(event.displayMode);
   const [pw,   setPw]   = useState(event.adminPassword);
   const [msg,  setMsg]  = useState(event.coverMessage || "");
-  const [mosaicMax, setMosaicMax] = useState(event.mosaicMax || DEFAULT_TV_SETTINGS.mosaicMax);
-  const [mosaicShape, setMosaicShape] = useState(event.mosaicShape || DEFAULT_TV_SETTINGS.mosaicShape);
-  const [mosaicText, setMosaicText] = useState(event.mosaicText || DEFAULT_TV_SETTINGS.mosaicText);
-  const mosaicProgress = Math.min(100, Math.round((Math.min(photoCount, mosaicMax) / mosaicMax) * 100));
-
-  useEffect(() => {
-    setDm(event.displayMode || DEFAULT_TV_SETTINGS.displayMode);
-    setMosaicMax(event.mosaicMax || DEFAULT_TV_SETTINGS.mosaicMax);
-    setMosaicShape(event.mosaicShape || DEFAULT_TV_SETTINGS.mosaicShape);
-    setMosaicText(event.mosaicText || DEFAULT_TV_SETTINGS.mosaicText);
-  }, [event.displayMode, event.mosaicMax, event.mosaicShape, event.mosaicText]);
 
   return (
     <div style={{ maxWidth: 560, display: "grid", gap: 12 }}>
@@ -1613,48 +1430,10 @@ function AdminSettings({ event, photoCount, onUpdate }) {
       {/* Mode TV */}
       <div style={{ background: "var(--white)", borderRadius: 18, padding: "1.5rem", boxShadow: "0 2px 10px var(--shadow)" }}>
         <h3 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.3rem", color: "var(--burgundy)", marginBottom: 12 }}>Affichage TV</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 8 }}>
-          {[["wall","🧱 Mur"],["slideshow","🎞 Diapo"],["mixed","⊞ Mixte"],["mosaic","♥ Mosaïque"]].map(([v,l]) => (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+          {[["wall","🧱 Mur"],["slideshow","🎞 Diapo"],["mixed","⊞ Mixte"]].map(([v,l]) => (
             <button key={v} onClick={() => setDm(v)} style={{ padding: "13px", borderRadius: 11, textAlign: "center", border: `2px solid ${dm === v ? "var(--rose)" : "var(--blush)"}`, background: dm === v ? "#fff0ed" : "var(--cream)", color: "var(--text)", fontWeight: dm === v ? 500 : 400, transition: "all .2s" }}>{l}</button>
           ))}
-        </div>
-      </div>
-
-      {/* Mosaïque progressive */}
-      <div style={{ background: "var(--white)", borderRadius: 18, padding: "1.5rem", boxShadow: "0 2px 10px var(--shadow)" }}>
-        <h3 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.3rem", color: "var(--burgundy)", marginBottom: 4 }}>Mosaïque progressive</h3>
-        <p style={{ color: "var(--muted)", fontSize: ".78rem", marginBottom: 16 }}>Chaque nouvelle photo publiée révèle un emplacement supplémentaire.</p>
-
-        <label style={{ fontSize: ".75rem", color: "var(--muted)", display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 7 }}>
-          <span>Nombre de photos pour compléter la mosaïque</span>
-          <strong style={{ color: "var(--burgundy)", fontSize: ".9rem" }}>{mosaicMax}</strong>
-        </label>
-        <input type="range" min="10" max="500" step="5" value={mosaicMax} onChange={e => setMosaicMax(Number(e.target.value))}
-          style={{ width: "100%", accentColor: "var(--rose)", marginBottom: 16 }} />
-
-        <p style={{ fontSize: ".75rem", color: "var(--muted)", marginBottom: 7 }}>Forme à révéler</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 8, marginBottom: 12 }}>
-          {[["heart","♥ Cœur"],["text","✦ Texte personnalisé"]].map(([value, label]) => (
-            <button key={value} onClick={() => setMosaicShape(value)} style={{ padding: "11px", borderRadius: 11, border: `2px solid ${mosaicShape === value ? "var(--rose)" : "var(--blush)"}`, background: mosaicShape === value ? "#fff0ed" : "var(--cream)", color: "var(--text)" }}>{label}</button>
-          ))}
-        </div>
-
-        {mosaicShape === "text" && (
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: ".75rem", color: "var(--muted)", display: "block", marginBottom: 4 }}>Texte de la mosaïque</label>
-            <input value={mosaicText} maxLength={40} onChange={e => setMosaicText(e.target.value)} placeholder="Huyen + Quentin"
-              style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: "1.5px solid var(--blush)", background: "var(--cream)", fontSize: ".93rem" }} />
-          </div>
-        )}
-
-        <div style={{ background: "var(--cream)", borderRadius: 12, padding: "11px 13px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: ".75rem", color: "var(--muted)", marginBottom: 6 }}>
-            <span>Actuellement {mosaicProgress}% révélé</span>
-            <span>{Math.min(photoCount, mosaicMax)} / {mosaicMax} photos</span>
-          </div>
-          <div style={{ height: 7, borderRadius: 50, overflow: "hidden", background: "var(--blush)" }}>
-            <div style={{ width: `${mosaicProgress}%`, height: "100%", borderRadius: 50, background: "linear-gradient(90deg,var(--rose),var(--burgundy))", transition: "width .4s ease" }} />
-          </div>
         </div>
       </div>
 
@@ -1682,7 +1461,7 @@ function AdminSettings({ event, photoCount, onUpdate }) {
         </p>
       </div>
 
-      <button onClick={() => onUpdate({ name, date, moderationMode: mm, displayMode: dm, adminPassword: pw, coverMessage: msg, mosaicMax, mosaicShape, mosaicText })} className="btn"
+      <button onClick={() => onUpdate({ name, date, moderationMode: mm, displayMode: dm, adminPassword: pw, coverMessage: msg })} className="btn"
         style={{ width: "100%", padding: "14px", borderRadius: 50, fontSize: ".97rem", background: "linear-gradient(135deg, var(--rose), var(--burgundy))", color: "white", fontWeight: 500, boxShadow: "0 4px 18px rgba(92,42,30,.28)" }}>
         💾 Sauvegarder
       </button>
