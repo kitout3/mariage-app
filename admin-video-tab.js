@@ -53,10 +53,21 @@
 
   async function removeVideo(video) {
     const { db, bucket, firestore, storage } = await firebase();
-    if (video.path) {
-      try { await storage.deleteObject(storage.ref(bucket, video.path)); } catch (error) { console.warn(error); }
-    }
     await firestore.deleteDoc(firestore.doc(db, "videoTestimonials", video.id));
+    if (video.path) {
+      void storage.deleteObject(storage.ref(bucket, video.path))
+        .catch(error => console.warn("Suppression du fichier vidéo :", error));
+    }
+  }
+
+  function updateFilterCounts(panel, videos) {
+    const labels = { all: "Toutes", pending: "En attente", approved: "Validées", rejected: "Refusées" };
+    Object.entries(labels).forEach(([filter, label]) => {
+      const button = panel.querySelector(`[data-filter="${filter}"]`);
+      if (!button) return;
+      const count = filter === "all" ? videos.length : videos.filter(video => video.status === filter).length;
+      button.textContent = `${label} (${count})`;
+    });
   }
 
   function ensureStyles() {
@@ -110,6 +121,7 @@
     panel.innerHTML = '<div class="av-empty">Chargement des vidéos…</div>';
     try {
       const videos = await getVideos();
+      let currentVideos = videos;
       const counts = {
         all: videos.length,
         pending: videos.filter(v => v.status === "pending").length,
@@ -165,8 +177,17 @@
         };
         card.querySelector("[data-delete]").onclick = async () => {
           if (!confirm("Supprimer définitivement cette vidéo ?")) return;
-          await removeVideo(video);
-          await renderVideos(panel);
+          currentVideos = currentVideos.filter(item => item.id !== video.id);
+          card.remove();
+          updateFilterCounts(panel, currentVideos);
+          if (!grid.querySelector(".av-card")) grid.innerHTML = '<div class="av-empty">Aucune vidéo dans cette catégorie.</div>';
+          try {
+            await removeVideo(video);
+          } catch (error) {
+            console.error("Suppression vidéo :", error);
+            alert("La suppression a échoué. La liste va être actualisée.");
+            await renderVideos(panel);
+          }
         };
         grid.appendChild(card);
       });
