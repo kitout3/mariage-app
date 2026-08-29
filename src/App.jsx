@@ -880,6 +880,8 @@ function buildPlaylist(photos, boostFactor = 3) {
   return playlist;
 }
 
+const TV_ROTATION_MS = 9000;
+
 function LiveTV({ setView }) {
   const [photos, setPhotos] = useState([]);
   const [mode, setMode] = useState("mixed");
@@ -982,7 +984,11 @@ function LiveTV({ setView }) {
             {photos.length} photo{photos.length !== 1 ? "s" : ""}
           </span>
         </div>
-        <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+        <div style={{
+          position: "fixed", top: 76, right: 12,
+          display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end",
+          maxWidth: "calc(100vw - 24px)",
+        }}>
           {["wall","slideshow","mixed"].map(m => (
             <button key={m} onClick={() => setMode(m)} style={{
               padding: "5px 16px", borderRadius: 50, fontSize: ".8rem", fontFamily: "'Jost',sans-serif",
@@ -1046,7 +1052,7 @@ function WallMode({ photos }) {
   useEffect(() => { setRotation(0); }, [photos.length, capacity]);
   useEffect(() => {
     if (photos.length <= 1) return;
-    const interval = setInterval(() => setRotation(current => current + 1), 7000);
+    const interval = setInterval(() => setRotation(current => current + 1), TV_ROTATION_MS);
     return () => clearInterval(interval);
   }, [photos.length]);
 
@@ -1109,16 +1115,25 @@ function SlideshowMode({ photo, index, speed, total }) {
 function MixedMode({ photos }) {
   // Photo "vedette" : alterne entre la dernière arrivée et la plus likée
   const [featureToggle, setFeatureToggle] = useState(false);
+  const [rotation, setRotation] = useState(0);
   const latest  = photos[0];
   const topLiked = [...photos].sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
   const featured = featureToggle && topLiked && (topLiked.likes || 0) > 0 ? topLiked : (latest || null);
 
   useEffect(() => {
-    const iv = setInterval(() => setFeatureToggle(t => !t), 8000);
+    const iv = setInterval(() => {
+      setFeatureToggle(t => !t);
+      setRotation(current => current + 1);
+    }, TV_ROTATION_MS);
     return () => clearInterval(iv);
   }, []);
 
   const rest = photos.filter(p => p.id !== featured?.id);
+  const visibleRest = useMemo(() => {
+    if (!rest.length) return [];
+    const start = (rotation * 4) % rest.length;
+    return Array.from({ length: Math.min(4, rest.length) }, (_, index) => rest[(start + index) % rest.length]);
+  }, [rest, rotation]);
 
   return (
     <div style={{ display: "flex", width: "100%", height: "100%", gap: 3, padding: 3 }}>
@@ -1138,8 +1153,8 @@ function MixedMode({ photos }) {
         </div>
       )}
       <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gridAutoRows: "calc(50% - 1.5px)", gap: 3, overflow: "hidden" }}>
-        {rest.slice(0, 4).map(p => (
-          <div key={p.id} style={{ borderRadius: 8, overflow: "hidden", position: "relative" }}>
+        {visibleRest.map(p => (
+          <div key={`${p.id}-${rotation}`} style={{ borderRadius: 8, overflow: "hidden", position: "relative", animation: "fadeIn .7s ease" }}>
             <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             {(p.author || (p.likes || 0) > 0) && (
               <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: ".4rem .6rem", background: "linear-gradient(0deg,rgba(0,0,0,.65),transparent)", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
